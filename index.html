@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SlotZero 1.1</title>
+<title>Periodica 1.1</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; margin: 18px; color: #111; font-size: 14px; }
@@ -50,7 +50,7 @@
 </head>
 <body>
 
-<h1>SlotZero 1.1</h1>
+<h1>Periodica 1.1</h1>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -155,7 +155,8 @@ const SAMPLE = {
   ]
 };
 
-const KEY = "slotzero.data.v5";
+const KEY = "periodica.data.v5";
+const OLD_KEY = "slotzero.data.v5";
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -163,7 +164,7 @@ let state = load();
 
 function load() {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) || localStorage.getItem(OLD_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) { /* fall through */ }
   return clone(SAMPLE);
