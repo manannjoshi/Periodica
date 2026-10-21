@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.7</title>
+<title>Periodica 1.8</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -288,7 +288,7 @@
 <body>
 
 <header class="topbar">
-  <h1>Periodica <span class="ver">1.7</span></h1>
+  <h1>Periodica <span class="ver">1.8</span></h1>
   <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
 </header>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
@@ -365,33 +365,94 @@ const SAMPLE = {
   periodMinutes: 50,
   breakMinutes: 10,
   teachers: [
-    { name: "Aarti",    unavail: ["Mon", "Tue"] },
-    { name: "Vipin",    unavail: ["Fri"] },
-    { name: "Richa",    unavail: [] },
-    { name: "Akanksha", unavail: [] },
-    { name: "Arohi",    unavail: ["Wed"] }
+    { name: "Richa Singh", unavail: [] },
+    { name: "Aarti Yadav", unavail: [] },
+    { name: "Vipin Yadav", unavail: [] },
+    { name: "Raveena Yadav", unavail: [] },
+    { name: "Akanksha Mathur", unavail: [] },
+    { name: "Arohi Mathur", unavail: [] },
   ],
   rooms: [
-    { name: "R101", type: "class", capacity: 40 },
-    { name: "R102", type: "class", capacity: 40 },
-    { name: "LAB1", type: "lab",   capacity: 30 },
-    { name: "LAB2", type: "lab",   capacity: 30 }
+    { name: "RN 037", type: "class", capacity: 60 },
+    { name: "RN 135", type: "class", capacity: 60 },
+    { name: "RN 303", type: "class", capacity: 60 },
+    { name: "N 205", type: "class", capacity: 60 },
+    { name: "RN 216", type: "class", capacity: 60 },
+    { name: "RN 223 (CAD LAB)", type: "lab", capacity: 60 },
+    { name: "LAB1", type: "lab", capacity: 60 },
+    { name: "LAB2", type: "lab", capacity: 60 },
   ],
   courses: [
+    // Blocks per week come from the ERP timetable of section F (21-28 Oct 2026):
+    // FOCP-I 5, CSL120 3, MAL151 3, MAL151 lab 1, CSL110 2, CSL110 lab 1, MEP110 2 labs.
+    // The ERP week of CSL120 is one 2-period + two 1-period classes; since the app takes one row
+    // per course+section, all three are modelled as 1-period blocks. Lab blocks get their own code.
+    // ERP confirms the faculty of section F only, so for A-E and G-H the same six faculty rotate.
+    // section A
+    { code: "CSL106N", section: "A", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "A", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "A", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "A", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "A", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "A", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "A", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    // section B
+    { code: "CSL106N", section: "B", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "B", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "B", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "B", batch: "", teacher: "Richa Singh", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "B", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    // section C
+    { code: "CSL106N", section: "C", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "C", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "C", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "C", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "C", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    // section D
+    { code: "CSL106N", section: "D", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "D", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "D", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "D", batch: "", teacher: "Richa Singh", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "D", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "D", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "D", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    // section E
+    { code: "CSL106N", section: "E", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "E", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "E", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "E", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "E", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
     // section F
-    { code: "CSL120", section: "F", batch: "",     teacher: "Aarti",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MAL151", section: "F", batch: "",     teacher: "Vipin",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "FOCP",   section: "F", batch: "",     teacher: "Richa",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "CSL110", section: "F", batch: "",     teacher: "Akanksha", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MEP110", section: "F", batch: "CS11", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
-    { code: "MEP110", section: "F", batch: "CS12", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "CSL106N", section: "F", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "F", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "F", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "F", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "F", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MME001", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 1, roomType: "class", size: 60 },
     // section G
-    { code: "CSL120", section: "G", batch: "",     teacher: "Aarti",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MAL151", section: "G", batch: "",     teacher: "Vipin",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "FOCP",   section: "G", batch: "",     teacher: "Richa",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "CSL110", section: "G", batch: "",     teacher: "Akanksha", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MEP110", section: "G", batch: "CS11", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
-    { code: "MEP110", section: "G", batch: "CS12", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 }
+    { code: "CSL106N", section: "G", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "G", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "G", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "G", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "G", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "G", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "G", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    // section H
+    { code: "CSL106N", section: "H", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "H", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "H", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "H", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "H", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "H", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "H", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
   ]
 };
 
