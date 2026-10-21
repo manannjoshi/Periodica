@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.9</title>
+<title>Periodica 1.10</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -191,6 +191,12 @@
     border-color:var(--line); color:var(--muted);
   }
   #grid h3 .print-one:hover{ background:var(--field); color:var(--ink); border-color:var(--field-line-hover); }
+  #grid h3 .pdf-one{
+    height:24px; padding:0 9px; font-size:10.5px; font-weight:650;
+    letter-spacing:.04em; text-transform:uppercase; background:var(--accent-soft);
+    border-color:transparent; color:var(--accent-deep);
+  }
+  #grid h3 .pdf-one:hover{ background:var(--h2btn-hover); border-color:var(--ver-line); }
 
   #grid table{
     width:100%; border-collapse:separate; border-spacing:0; overflow:hidden;
@@ -252,7 +258,7 @@
     html, body{ background:var(--surface); color:var(--ink); }
     body{ max-width:none; padding:0; font-size:11px; }
     section, .actions, #msg, #stats, .sub, .hint{ display:none !important; }
-    #grid h3 .print-one{ display:none !important; }
+    #grid h3 .print-one, #grid h3 .pdf-one{ display:none !important; }
     body.print-one #grid h3:not(.keep), body.print-one #grid table:not(.keep){ display:none !important; }
     body.print-one #grid table.keep{ page-break-after:auto; break-after:auto; }
     h1{ font-size:16px; margin:0 0 10px; }
@@ -282,7 +288,7 @@
 <body>
 
 <header class="topbar">
-  <h1>Periodica <span class="ver">1.9</span></h1>
+  <h1>Periodica <span class="ver">1.10</span></h1>
   <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
 </header>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
@@ -1153,7 +1159,9 @@ function renderGrid(model, assignment) {
 
   let html = "";
   for (const g of groups) {
-    html += '<h3><span>' + esc(heading(g)) + '</span>' + legend(g) + '<button class="print-one" data-g="' + esc(g) + '" aria-label="Print ' + esc(g) + ' timetable">print</button></h3>'
+    html += '<h3><span>' + esc(heading(g)) + '</span>' + legend(g)
+          + '<button class="print-one" data-g="' + esc(g) + '" aria-label="Print ' + esc(heading(g)) + ' timetable">print</button>'
+          + '<button class="pdf-one" data-g="' + esc(g) + '" data-title="Periodica - ' + esc(heading(g)) + '" aria-label="Download ' + esc(heading(g)) + ' as PDF" title="Save this one as PDF - in the print dialog pick \'Save as PDF\'">PDF</button></h3>'
           + '<table data-g="' + esc(g) + '"><tr><th>period</th>';
     for (const d of days) html += "<th>" + esc(d) + "</th>";
     html += "</tr>";
@@ -1190,7 +1198,7 @@ function clearPrintOne() {
   for (const el of $("grid").querySelectorAll(".keep")) el.classList.remove("keep");
 }
 
-function printOne(g) {
+function printOne(g, docTitle) {
   const table = [...$("grid").querySelectorAll("table")].find(t => t.dataset.g === g);
   if (!table) return;
   clearPrintOne();
@@ -1199,15 +1207,15 @@ function printOne(g) {
   document.body.classList.add("print-one");
   table.classList.add("keep");
   if (head && head.tagName === "H3") head.classList.add("keep");
-  document.title = "Periodica - " + g;
+  document.title = docTitle || ("Periodica - " + g);
   const done = () => { clearPrintOne(); document.title = oldTitle; };
   window.addEventListener("afterprint", done, { once: true });
   window.print();
 }
 
 $("grid").addEventListener("click", e => {
-  const b = e.target.closest(".print-one");
-  if (b) printOne(b.dataset.g);
+  const b = e.target.closest(".print-one, .pdf-one");
+  if (b) printOne(b.dataset.g, b.dataset.title);
 });
 
 $("print").onclick = () => {
