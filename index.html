@@ -3,56 +3,210 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.3</title>
+<title>Periodica 1.4</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, sans-serif; margin: 18px; color: #111; font-size: 14px; }
-  h1 { font-size: 20px; margin: 0 0 2px; }
-  h2 { font-size: 14px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
-  .sub { color: #666; font-size: 12px; margin-bottom: 14px; }
-  section { border: 1px solid #ccc; padding: 10px; margin-bottom: 12px; }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
-  label { font-size: 12px; color: #444; }
-  input, select { font: inherit; font-size: 12px; padding: 3px 5px; border: 1px solid #aaa; }
-  input[type=number] { width: 70px; }
-  .w-code { width: 90px; } .w-sec { width: 60px; } .w-name { width: 130px; }
-  .w-days { width: 150px; }
-  button { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
-  .del { padding: 1px 6px; color: #900; }
-  table { border-collapse: collapse; font-size: 12px; }
-  th, td { border: 1px solid #bbb; padding: 2px 4px; text-align: left; vertical-align: middle; }
-  th { background: #eee; font-weight: 600; }
-  #stats { font-family: monospace; font-size: 12px; white-space: pre; margin: 10px 0; }
-  #grid table { font-family: monospace; font-size: 11px; }
-  .cell { min-width: 115px; }
-  .empty { color: #bbb; }
-  .cont { display: block; color: #777; font-size: 10px; padding-left: 9px; }
-  #grid td.cell { padding: 0; }
-  #grid td.cell.empty { padding: 2px 4px; }
-  .ev { display: block; border-left: 3px solid hsl(var(--h) 60% 55%); padding: 3px 4px 3px 6px; }
-  .ev + .ev { margin-top: 3px; }
-  .batch { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .3px;
-           color: #fff; padding: 1px 4px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; }
-  .clash { outline: 2px solid red; background: #fee; }
-  .actions { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .msg { font-size: 12px; color: #900; margin: 8px 0; white-space: pre-wrap; }
-  .hint { font-size: 11px; color: #777; }
-  #grid h3 { font-size: 13px; margin: 16px 0 4px; }
-  #grid table { margin-bottom: 10px; }
-  #grid td { min-width: 130px; }
-  .period { white-space: nowrap; color: #555; }
-  @media print {
-    section, .actions, #msg, #stats, .sub { display: none !important; }
-    body { margin: 0; }
-    #grid table { page-break-after: always; break-after: page; }
-    #grid table:last-child { page-break-after: auto; break-after: auto; }
-    h1 { font-size: 16px; margin: 0 0 8px; }
+  :root{
+    --paper:#f5f4ef;
+    --surface:#fffefa;
+    --surface-2:#faf9f3;
+    --ink:#171a18;
+    --ink-2:#414a45;
+    --muted:#666e64;
+    --line:#dfe0d7;
+    --line-soft:#ecede4;
+    --accent:#1f5c45;
+    --accent-deep:#143f2f;
+    --accent-soft:#e6efe9;
+    --danger:#9c2b25;
+    --danger-soft:#fbeeec;
+    --radius:10px;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+    --shadow: 0 1px 2px rgba(23,26,24,.05), 0 10px 24px -18px rgba(23,26,24,.35);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0 auto; padding:36px 26px 80px; max-width:1220px;
+    background:var(--paper); color:var(--ink);
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size:14px; line-height:1.45;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  h1{
+    display:flex; align-items:center; gap:9px;
+    font-size:25px; font-weight:650; letter-spacing:-.025em; margin:0 0 5px;
+  }
+  .ver{
+    font-family:var(--mono); font-size:10.5px; font-weight:500; letter-spacing:0;
+    color:var(--accent-deep); background:var(--accent-soft);
+    border:1px solid #cfe0d6; border-radius:5px; padding:2px 6px; position:relative; top:1px;
+  }
+  .sub{ color:var(--muted); font-size:12.5px; margin:0 0 24px; max-width:74ch; }
+
+  section{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px 18px; margin-bottom:14px; box-shadow:var(--shadow);
+  }
+  h2{
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; font-weight:650; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--ink-2); margin:0 0 12px;
+  }
+  h2 button{ margin-left:auto; }
+
+  .row{ display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:6px; }
+  .row + .row{ margin-top:10px; }
+  label{
+    display:inline-flex; align-items:center; gap:7px;
+    font-size:10.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+  }
+
+  input, select{
+    font:inherit; font-size:12.5px; height:30px; padding:0 8px; max-width:100%;
+    color:var(--ink); background:#fff; border:1px solid #cfd3c8; border-radius:7px;
+    outline:none; transition:border-color .15s, box-shadow .15s, background .15s;
+  }
+  input::placeholder{ color:#a8aea2; }
+  input:hover, select:hover{ border-color:#b4baac; }
+  input:focus, select:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(31,92,69,.14); }
+  input[type=number]{ width:70px; }
+  .w-code{ width:90px; } .w-sec{ width:62px; } .w-name{ width:130px; } .w-days{ width:152px; }
+
+  tbody tr:hover td{ background:#fbfaf4; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th{
+    font-size:10.5px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+    text-align:left; padding:0 8px 7px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  td{ padding:2px 8px; border-bottom:1px solid var(--line-soft); }
+  tbody tr:last-child td{ border-bottom:0; }
+  #teacherRows input, #roomRows input, #courseRows input,
+  #teacherRows select, #roomRows select, #courseRows select{ width:100%; min-width:70px; height:28px; background:transparent; border-color:transparent; }
+  #teacherRows input:hover, #roomRows input:hover, #courseRows input:hover,
+  #teacherRows select:hover, #roomRows select:hover, #courseRows select:hover{ background:#fff; border-color:#cfd3c8; }
+  #teacherRows input:focus, #roomRows input:focus, #courseRows input:focus,
+  #teacherRows select:focus, #roomRows select:focus, #courseRows select:focus{ background:#fff; }
+
+  button{
+    font:inherit; font-size:12.5px; font-weight:550; height:30px; padding:0 12px;
+    color:var(--ink); background:#fff; border:1px solid #cfd3c8; border-radius:7px; cursor:pointer;
+    transition:background .15s, border-color .15s, transform .06s, box-shadow .15s;
+  }
+  button:hover{ background:#f7f7ef; border-color:#b4baac; }
+  button:active{ transform:translateY(1px); }
+  button:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(31,92,69,.2); }
+  #generate{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  #generate:hover{ background:var(--accent-deep); border-color:var(--accent-deep); }
+  h2 button{
+    height:24px; padding:0 9px; font-size:10.5px; font-weight:650; letter-spacing:.02em; text-transform:none;
+    background:var(--accent-soft); border-color:transparent; color:var(--accent-deep);
+  }
+  h2 button:hover{ background:#d7e6dd; border-color:#cfe0d6; }
+  .del{ padding:0 7px; color:var(--danger); background:transparent; border-color:transparent; }
+  .del:hover{ background:var(--danger-soft); border-color:#f1d7d3; }
+
+  .actions{
+    display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 16px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 14px; box-shadow:var(--shadow);
+  }
+  .actions label{ margin-left:auto; }
+
+  .msg{
+    font-size:12.5px; color:var(--danger); background:var(--danger-soft);
+    border:1px solid #f1d7d3; border-left:3px solid var(--danger); border-radius:8px;
+    padding:10px 12px; margin:0 0 14px; white-space:pre-wrap;
+  }
+  .msg:empty{ display:none; }
+
+  #stats{
+    font-family:var(--mono); font-size:11.5px; line-height:1.75; white-space:pre; overflow-x:auto;
+    color:var(--ink-2); background:var(--surface-2); border:1px solid var(--line);
+    border-radius:8px; padding:12px 14px; margin:0 0 24px; font-variant-numeric:tabular-nums;
+  }
+
+  .hint{ font-size:11.5px; color:var(--muted); line-height:1.5; }
+
+  #grid h3{
+    display:flex; align-items:center; gap:9px;
+    font-size:15px; font-weight:650; letter-spacing:-.01em; margin:28px 0 10px;
+  }
+  #grid h3::before{ content:""; width:9px; height:9px; border-radius:2px; background:var(--accent); flex:none; }
+
+  #grid table{
+    width:100%; border-collapse:separate; border-spacing:0; overflow:hidden;
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    margin-bottom:18px; font-size:12.5px;
+  }
+  #grid th{
+    background:var(--surface-2); padding:9px 10px;
+    border-bottom:1px solid var(--line); border-right:1px solid var(--line-soft);
+  }
+  #grid th:last-child{ border-right:0; }
+  #grid th:first-child{ width:88px; }
+  #grid td{
+    height:54px; padding:4px 5px; vertical-align:top;
+    border-bottom:1px solid var(--line-soft); border-right:1px solid var(--line-soft);
+  }
+  #grid td:last-child{ border-right:0; }
+  #grid tr:last-child td{ border-bottom:0; }
+  #grid tr:hover td{ background:#fff; }
+  #grid tr:hover td.cell{ background:#fdfcf7; }
+  td.period{
+    font-family:var(--mono); font-size:10.5px; color:var(--muted);
+    background:var(--surface-2); padding:6px 9px; white-space:nowrap;
+  }
+  .cell{ min-width:120px; }
+  .cell.empty{ color:#b3b9ac; font-size:11px; padding:6px 9px; }
+
+  .ev{
+    display:block; border-left:3px solid hsl(var(--h) 42% 46%);
+    background:hsl(var(--h) 48% 96%); border-radius:0 6px 6px 0;
+    padding:5px 7px 5px 8px; font-size:11.5px; line-height:1.35; color:#20251f;
+  }
+  .ev + .ev{ margin-top:2px; }
+  .cont{ display:block; color:#7c8478; font-size:11.5px; padding:1px 0 0 10px; line-height:1.3; }
+  .batch{
+    display:inline-block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.02em;
+    color:#fff; padding:1px 5px; border-radius:4px; margin-right:5px; vertical-align:1px;
+  }
+  .clash{ background:var(--danger-soft); box-shadow:inset 0 0 0 2px var(--danger); }
+
+  @media (max-width:900px){
+    section{ overflow-x:auto; }
+    #courseRows input, #courseRows select,
+    #teacherRows input, #roomRows input{ min-width:56px; }
+  }
+  @media (max-width:820px){
+    body{ padding:22px 14px 56px; }
+    h1{ font-size:22px; }
+    .actions label{ margin-left:0; }
+    #grid{ overflow-x:auto; padding-bottom:8px; }
+    #grid table{ min-width:660px; }
+  }
+
+  @media print{
+    @page{ margin:12mm; }
+    body{ max-width:none; padding:0; background:#fff; font-size:11px; }
+    section, .actions, #msg, #stats, .sub, .hint{ display:none !important; }
+    h1{ font-size:16px; margin:0 0 10px; }
+    .ver{ display:none; }
+    #grid h3{ margin:14px 0 6px; font-size:12px; }
+    #grid table{
+      border:1px solid #9a9a9a; border-radius:0; font-size:10.5px;
+      page-break-after:always; break-after:page;
+    }
+    #grid table:last-child{ page-break-after:auto; break-after:auto; }
+    #grid th{ background:#f1f1ee !important; border-color:#9a9a9a; }
+    #grid td{ height:auto; border-color:#cfcfc9; }
+    .ev{ background:#f5f5f1 !important; border-left-width:2px; }
+    .cont{ color:#777; }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
 </head>
 <body>
 
-<h1>Periodica 1.3</h1>
+<h1>Periodica <span class="ver">1.4</span></h1>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -818,7 +972,7 @@ function renderGrid(model, assignment) {
     teacher: g => g
   }[view];
 
-  const PALETTE = ["#2563eb", "#d97706", "#7c3aed", "#0e7490", "#be123c", "#15803d"];
+  const PALETTE = ["#3f5f9e", "#a8622a", "#6b4f9e", "#2f6f7a", "#9e3b52", "#3f7a4f"];
   const batchColor = {};
   [...new Set(state.courses.map(c => c.batch).filter(Boolean))].sort()
     .forEach((b, i) => batchColor[b] = PALETTE[i % PALETTE.length]);
