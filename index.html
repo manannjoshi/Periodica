@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.8</title>
+<title>Periodica 1.9</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -219,7 +219,7 @@
   .cell.empty{ color:var(--faint); font-size:11px; padding:6px 9px; }
 
   .ev{
-    display:block; border-left:3px solid hsl(var(--h) var(--evl-s) var(--evl-l));
+    display:block; border-left:3px solid var(--bc, hsl(var(--h) var(--evl-s) var(--evl-l)));
     background:hsl(var(--h) var(--ev-s) var(--ev-l)); border-radius:0 6px 6px 0;
     padding:5px 7px 5px 8px; font-size:11.5px; line-height:1.35; color:var(--ev-ink);
   }
@@ -229,6 +229,9 @@
     display:inline-block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.02em;
     color:#fff; padding:1px 5px; border-radius:4px; margin-right:5px; vertical-align:1px;
   }
+  .legend{ display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .legend .chip{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:550; color:var(--ink-2); }
+  .legend .chip i{ width:11px; height:11px; border-radius:3px; background:var(--c); display:block; flex:none; }
   .clash{ background:var(--danger-soft); box-shadow:inset 0 0 0 2px var(--danger); }
 
   @media (max-width:900px){
@@ -245,18 +248,9 @@
   }
 
   @media print{
-    html[data-theme="dark"]{
-      --ink:#171a18; --ink-2:#414a45; --muted:#666e64;
-      --surface:#fffefa; --surface-2:#faf9f3;
-      --line:#dfe0d7; --line-soft:#ecede4;
-      --field:#fff; --field-hover:#f7f7ef; --field-line:#cfd3c8; --field-line-hover:#b4baac;
-      --ev-ink:#20251f; --ev-s:48%; --ev-l:96%; --evl-s:42%; --evl-l:46%;
-      --cont-ink:#7c8478; --faint:#b3b9ac;
-      --accent:#1f5c45; --accent-deep:#143f2f; --accent-soft:#e6efe9;
-      --danger:#9c2b25; --danger-soft:#fbeeec; --danger-line:#f1d7d3;
-    }
     @page{ margin:12mm; }
-    body{ max-width:none; padding:0; background:#fff; font-size:11px; }
+    html, body{ background:var(--surface); color:var(--ink); }
+    body{ max-width:none; padding:0; font-size:11px; }
     section, .actions, #msg, #stats, .sub, .hint{ display:none !important; }
     #grid h3 .print-one{ display:none !important; }
     body.print-one #grid h3:not(.keep), body.print-one #grid table:not(.keep){ display:none !important; }
@@ -266,14 +260,14 @@
     .theme-btn{ display:none !important; }
     #grid h3{ margin:14px 0 6px; font-size:12px; }
     #grid table{
-      border:1px solid #9a9a9a; border-radius:0; font-size:10.5px;
+      border:1px solid var(--line); border-radius:0; font-size:10.5px;
       page-break-after:always; break-after:page;
     }
     #grid table:last-child{ page-break-after:auto; break-after:auto; }
-    #grid th{ background:#f1f1ee !important; border-color:#9a9a9a; }
-    #grid td{ height:auto; border-color:#cfcfc9; }
-    .ev{ background:#f5f5f1 !important; border-left-width:2px; }
-    .cont{ color:#777; }
+    #grid th{ background:var(--surface-2) !important; border-color:var(--line); }
+    #grid td{ height:auto; border-color:var(--line-soft); }
+    .ev{ border-left-width:3px; }
+    .cont{ color:var(--cont-ink); }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
@@ -288,7 +282,7 @@
 <body>
 
 <header class="topbar">
-  <h1>Periodica <span class="ver">1.8</span></h1>
+  <h1>Periodica <span class="ver">1.9</span></h1>
   <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
 </header>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
@@ -340,7 +334,7 @@
   <button id="generate">Generate timetable</button>
   <button id="sample">Load sample data</button>
   <button id="clear">Clear all</button>
-  <button id="print">Print / save PDF</button>
+  <button id="print" title="Opens the print dialog - pick 'Save as PDF' as the destination. The PDF keeps the current view and the current mode (dark stays dark).">Download PDF</button>
   <label style="margin-left:10px">view:
     <select id="view">
       <option value="section" selected>by section</option>
@@ -386,48 +380,54 @@ const SAMPLE = {
     // Blocks per week come from the ERP timetable of section F (21-28 Oct 2026):
     // FOCP-I 5, CSL120 3, MAL151 3, MAL151 lab 1, CSL110 2, CSL110 lab 1, MEP110 2 labs.
     // The ERP week of CSL120 is one 2-period + two 1-period classes; since the app takes one row
-    // per course+section, all three are modelled as 1-period blocks. Lab blocks get their own code.
+    // per course+section, all three are modelled as 1-period blocks.
+    // MEP110 (CAD lab) runs in two batches, CS 11 and CS 12, so every student still gets 2 labs a week.
     // ERP confirms the faculty of section F only, so for A-E and G-H the same six faculty rotate.
     // section A
-    { code: "CSL106N", section: "A", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL106N", section: "A", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "CSL120", section: "A", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "A", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151L", section: "A", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MAL151", section: "A", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "A", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
     { code: "CSL110", section: "A", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "A", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "A", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110L", section: "A", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "A", batch: "CS 11", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "A", batch: "CS 12", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section B
-    { code: "CSL106N", section: "B", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL120", section: "B", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "B", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL106N", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "B", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "MAL151L", section: "B", batch: "", teacher: "Richa Singh", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "CSL110", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "B", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "B", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "B", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "B", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "B", batch: "CS 11", teacher: "Richa Singh", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "B", batch: "CS 12", teacher: "Richa Singh", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section C
-    { code: "CSL106N", section: "C", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL120", section: "C", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "C", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151L", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "CSL110", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "C", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "C", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL106N", section: "C", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "C", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "C", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "C", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "C", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "C", batch: "CS 11", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "C", batch: "CS 12", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section D
     { code: "CSL106N", section: "D", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL120", section: "D", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "D", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151L", section: "D", batch: "", teacher: "Richa Singh", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL120", section: "D", batch: "", teacher: "Richa Singh", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "D", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "D", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
     { code: "CSL110", section: "D", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "D", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "D", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110L", section: "D", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "D", batch: "CS 11", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "D", batch: "CS 12", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section E
-    { code: "CSL106N", section: "E", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL120", section: "E", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "E", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151L", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL106N", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "E", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151L", section: "E", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
     { code: "CSL110", section: "E", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "E", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "E", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110L", section: "E", batch: "", teacher: "Richa Singh", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "E", batch: "CS 11", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "E", batch: "CS 12", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section F
     { code: "CSL106N", section: "F", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "CSL120", section: "F", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
@@ -435,24 +435,27 @@ const SAMPLE = {
     { code: "MAL151L", section: "F", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
     { code: "CSL110", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "CSL110L", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "F", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "F", batch: "CS 11", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "F", batch: "CS 12", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     { code: "MME001", section: "F", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 1, roomType: "class", size: 60 },
     // section G
-    { code: "CSL106N", section: "G", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL120", section: "G", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151", section: "G", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL106N", section: "G", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL120", section: "G", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "MAL151", section: "G", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "MAL151L", section: "G", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
     { code: "CSL110", section: "G", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "G", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "G", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110L", section: "G", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "G", batch: "CS 11", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "G", batch: "CS 12", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
     // section H
     { code: "CSL106N", section: "H", batch: "", teacher: "Richa Singh", blocksPerWeek: 5, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "CSL120", section: "H", batch: "", teacher: "Aarti Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
     { code: "MAL151", section: "H", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "MAL151L", section: "H", batch: "", teacher: "Raveena Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "CSL110", section: "H", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
-    { code: "CSL110L", section: "H", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
-    { code: "MEP110", section: "H", batch: "", teacher: "Arohi Mathur", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MAL151L", section: "H", batch: "", teacher: "Akanksha Mathur", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "CSL110", section: "H", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 60 },
+    { code: "CSL110L", section: "H", batch: "", teacher: "Vipin Yadav", blocksPerWeek: 1, blockPeriods: 2, roomType: "lab", size: 60 },
+    { code: "MEP110", section: "H", batch: "CS 11", teacher: "Richa Singh", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
+    { code: "MEP110", section: "H", batch: "CS 12", teacher: "Richa Singh", blocksPerWeek: 2, blockPeriods: 2, roomType: "lab", size: 30 },
   ]
 };
 
@@ -1123,9 +1126,26 @@ function renderGrid(model, assignment) {
   }[view];
 
   const PALETTE = ["#3f5f9e", "#a8622a", "#6b4f9e", "#2f6f7a", "#9e3b52", "#3f7a4f"];
+  const FIXED_BATCH = { "CS11": "#c62828", "CS12": "#1d4ed8" };
+  const batchKey = b => String(b).replace(/\s+/g, "").toUpperCase();
   const batchColor = {};
   [...new Set(state.courses.map(c => c.batch).filter(Boolean))].sort()
-    .forEach((b, i) => batchColor[b] = PALETTE[i % PALETTE.length]);
+    .forEach((b, i) => batchColor[b] = FIXED_BATCH[batchKey(b)] || PALETTE[i % PALETTE.length]);
+
+  const groupBatches = {};
+  for (let idx = 0; idx < assignment.length; idx++) {
+    const a = assignment[idx];
+    if (!a) continue;
+    const s = sessions[idx];
+    const g = view === "room" ? a.room : view === "section" ? s.section : s.teacher;
+    if (s.batch) (groupBatches[g] || (groupBatches[g] = new Set())).add(s.batch);
+  }
+  const legend = g => {
+    const bs = groupBatches[g] ? [...groupBatches[g]].sort() : [];
+    if (!bs.length) return "";
+    return '<span class="legend">' + bs.map(b =>
+      '<span class="chip"><span>' + esc(b) + '</span><i style="--c:' + (batchColor[b] || "#555") + '"></i></span>').join("") + "</span>";
+  };
 
   const badge = s => s.batch
     ? '<span class="batch" style="background:' + (batchColor[s.batch] || "#555") + '">' + esc(s.batch) + "</span>"
@@ -1133,7 +1153,7 @@ function renderGrid(model, assignment) {
 
   let html = "";
   for (const g of groups) {
-    html += '<h3><span>' + esc(heading(g)) + '</span><button class="print-one" data-g="' + esc(g) + '" aria-label="Print ' + esc(g) + ' timetable">print</button></h3>'
+    html += '<h3><span>' + esc(heading(g)) + '</span>' + legend(g) + '<button class="print-one" data-g="' + esc(g) + '" aria-label="Print ' + esc(g) + ' timetable">print</button></h3>'
           + '<table data-g="' + esc(g) + '"><tr><th>period</th>';
     for (const d of days) html += "<th>" + esc(d) + "</th>";
     html += "</tr>";
@@ -1149,7 +1169,7 @@ function renderGrid(model, assignment) {
           const s = sessions[x.i];
           const room = assignment[x.i].room;
           if (x.start !== si) return '<span class="cont">↳ ' + badge(s) + esc(s.code) + "</span>";
-          const tint = ' class="ev" style="--h:' + courseHue(s.code) + '"';
+          const tint = ' class="ev" style="--h:' + courseHue(s.code) + (s.batch && batchColor[s.batch] ? ";--bc:" + batchColor[s.batch] : "") + '"';
           const tail = s.span > 1 ? " ·" + s.span + "p" : "";
           if (view === "room") return "<span" + tint + ">" + badge(s) + esc(s.code) + " " + esc(s.section) + " (" + esc(s.teacher) + ")" + tail + "</span>";
           if (view === "section") return "<span" + tint + ">" + badge(s) + esc(s.code) + " (" + esc(s.teacher) + ") · " + esc(room) + tail + "</span>";
@@ -1190,7 +1210,12 @@ $("grid").addEventListener("click", e => {
   if (b) printOne(b.dataset.g);
 });
 
-$("print").onclick = () => { clearPrintOne(); window.print(); };
+$("print").onclick = () => {
+  clearPrintOne();
+  if (!lastResult) $("generate").click();
+  if (!lastResult) { $("msg").textContent = "Generate a timetable before downloading the PDF."; return; }
+  window.print();
+};
 
 /* ================= run ================= */
 let lastResult = null;
