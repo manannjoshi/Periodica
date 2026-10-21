@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.12</title>
+<title>Periodica 1.13</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -229,8 +229,8 @@
     background:hsl(var(--h) var(--ev-s) var(--ev-l)); border-radius:0 6px 6px 0;
     padding:5px 7px 5px 8px; font-size:11.5px; line-height:1.35; color:var(--ev-ink);
   }
-  .ev + .ev{ margin-top:2px; }
-  .cont{ display:block; color:var(--cont-ink); font-size:11.5px; padding:1px 0 0 10px; line-height:1.3; }
+  .ev + .ev{ margin-top:1px; }
+  .cont{ display:block; color:var(--cont-ink); font-size:11.5px; padding:0 0 0 8px; line-height:1.2; }
   .batch{
     display:inline-block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.02em;
     color:#fff; padding:1px 5px; border-radius:4px; margin-right:5px; vertical-align:1px;
@@ -288,7 +288,7 @@
 <body>
 
 <header class="topbar">
-  <h1>Periodica <span class="ver">1.12</span></h1>
+  <h1>Periodica <span class="ver">1.13</span></h1>
   <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
 </header>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
@@ -1267,8 +1267,7 @@ function renderGrid(model, assignment) {
               : badge(s) + esc(s.code) + " " + esc(s.section) + " · " + esc(room) + tail;
           if (x.start !== si) return '<span class="cont">↳ ' + full + "</span>";
           return "<span" + tint + ">" + full + "</span>";
-          return "<span" + tint + ">" + badge(s) + esc(s.code) + " " + esc(s.section) + " · " + esc(room) + tail + "</span>";
-        }).join("<br>");
+        }).join("");
 
         html += '<td class="cell' + (list.length > 1 ? " clash" : "") + '">' + body + "</td>";
       }
