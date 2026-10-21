@@ -594,15 +594,9 @@ function solve(model) {
 function cost(model, assignment) {
   const { slots, sessions } = model;
   const secDay = {}, secPer = {}, teaDay = {}, teaPer = {}, courseDay = {};
-  const secOcc = {}, teaOcc = {};
 
   const bump = (m, k1, k2) => { const o = m[k1] || (m[k1] = {}); o[k2] = (o[k2] || 0) + 1; };
   const sq = o => { let t = 0; for (const k in o) t += o[k] * o[k]; return t; };
-
-  function touch(map, key, si, span) {
-    const set = map[key] || (map[key] = new Set());
-    for (let k = 0; k < span; k++) set.add(slots[si + k].index);
-  }
 
   for (let i = 0; i < assignment.length; i++) {
     const a = assignment[i];
@@ -615,9 +609,6 @@ function cost(model, assignment) {
 
     const cd = s.code + "|" + s.section + "|" + sl.day;
     courseDay[cd] = (courseDay[cd] || 0) + 1;
-
-    touch(secOcc, s.section + "|" + sl.day, a.si, s.span);
-    touch(teaOcc, s.teacher + "|" + sl.day, a.si, s.span);
   }
 
   let c = 0;
@@ -627,17 +618,6 @@ function cost(model, assignment) {
   for (const k in teaPer) c += sq(teaPer[k]);
 
   for (const k in courseDay) if (courseDay[k] > 1) c += 100 * (courseDay[k] - 1);
-
-  function adjacency(map, weight) {
-    let t = 0;
-    for (const k in map) {
-      const set = map[k];
-      for (const x of set) if (set.has(x + 1)) t += weight;
-    }
-    return t;
-  }
-  c += adjacency(secOcc, 12);   // students get a break between classes
-  c += adjacency(teaOcc, 2);    // teachers may run back-to-back, but not all day
 
   return c;
 }
