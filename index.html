@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.1</title>
+<title>Periodica 1.2</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; margin: 18px; color: #111; font-size: 14px; }
@@ -31,6 +31,8 @@
   #grid td.cell.empty { padding: 2px 4px; }
   .ev { display: block; border-left: 3px solid hsl(var(--h) 60% 55%); padding: 3px 4px 3px 6px; }
   .ev + .ev { margin-top: 3px; }
+  .batch { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .3px;
+           color: #fff; padding: 1px 4px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; }
   .clash { outline: 2px solid red; background: #fee; }
   .actions { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .msg { font-size: 12px; color: #900; margin: 8px 0; white-space: pre-wrap; }
@@ -50,7 +52,7 @@
 </head>
 <body>
 
-<h1>Periodica 1.1</h1>
+<h1>Periodica 1.2</h1>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -626,18 +628,16 @@ function cost(model, assignment) {
 
   for (const k in courseDay) if (courseDay[k] > 1) c += 100 * (courseDay[k] - 1);
 
-  function gapPenalty(map, weight) {
+  function adjacency(map, weight) {
     let t = 0;
     for (const k in map) {
       const set = map[k];
-      let lo = Infinity, hi = -Infinity;
-      for (const x of set) { if (x < lo) lo = x; if (x > hi) hi = x; }
-      t += weight * ((hi - lo + 1) - set.size);
+      for (const x of set) if (set.has(x + 1)) t += weight;
     }
     return t;
   }
-  c += gapPenalty(secOcc, 6);
-  c += gapPenalty(teaOcc, 3);
+  c += adjacency(secOcc, 12);   // students get a break between classes
+  c += adjacency(teaOcc, 2);    // teachers may run back-to-back, but not all day
 
   return c;
 }
@@ -838,6 +838,15 @@ function renderGrid(model, assignment) {
     teacher: g => g
   }[view];
 
+  const PALETTE = ["#2563eb", "#d97706", "#7c3aed", "#0e7490", "#be123c", "#15803d"];
+  const batchColor = {};
+  [...new Set(state.courses.map(c => c.batch).filter(Boolean))].sort()
+    .forEach((b, i) => batchColor[b] = PALETTE[i % PALETTE.length]);
+
+  const badge = s => s.batch
+    ? '<span class="batch" style="background:' + (batchColor[s.batch] || "#555") + '">' + esc(s.batch) + "</span>"
+    : "";
+
   let html = "";
   for (const g of groups) {
     html += "<h3>" + esc(heading(g)) + "</h3><table><tr><th>period</th>";
@@ -854,13 +863,12 @@ function renderGrid(model, assignment) {
         const body = list.map(x => {
           const s = sessions[x.i];
           const room = assignment[x.i].room;
-          const tag = s.batch ? "/" + esc(s.batch) : "";
-          if (x.start !== si) return '<span class="cont">↳ ' + esc(s.code) + tag + "</span>";
+          if (x.start !== si) return '<span class="cont">↳ ' + badge(s) + esc(s.code) + "</span>";
           const tint = ' class="ev" style="--h:' + courseHue(s.code) + '"';
           const tail = s.span > 1 ? " ·" + s.span + "p" : "";
-          if (view === "room") return "<span" + tint + ">" + esc(s.code) + " " + esc(s.section) + tag + " (" + esc(s.teacher) + ")" + tail + "</span>";
-          if (view === "section") return "<span" + tint + ">" + esc(s.code) + tag + " (" + esc(s.teacher) + ") · " + esc(room) + tail + "</span>";
-          return "<span" + tint + ">" + esc(s.code) + " " + esc(s.section) + tag + " · " + esc(room) + tail + "</span>";
+          if (view === "room") return "<span" + tint + ">" + badge(s) + esc(s.code) + " " + esc(s.section) + " (" + esc(s.teacher) + ")" + tail + "</span>";
+          if (view === "section") return "<span" + tint + ">" + badge(s) + esc(s.code) + " (" + esc(s.teacher) + ") · " + esc(room) + tail + "</span>";
+          return "<span" + tint + ">" + badge(s) + esc(s.code) + " " + esc(s.section) + " · " + esc(room) + tail + "</span>";
         }).join("<br>");
 
         html += '<td class="cell' + (list.length > 1 ? " clash" : "") + '">' + body + "</td>";
