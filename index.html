@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.4</title>
+<title>Periodica 1.5</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -131,6 +131,12 @@
     font-size:15px; font-weight:650; letter-spacing:-.01em; margin:28px 0 10px;
   }
   #grid h3::before{ content:""; width:9px; height:9px; border-radius:2px; background:var(--accent); flex:none; }
+  #grid h3 .print-one{
+    margin-left:auto; height:24px; padding:0 9px; font-size:10.5px; font-weight:600;
+    letter-spacing:.02em; text-transform:none; background:transparent;
+    border-color:var(--line); color:var(--muted);
+  }
+  #grid h3 .print-one:hover{ background:#fff; color:var(--ink); border-color:#b4baac; }
 
   #grid table{
     width:100%; border-collapse:separate; border-spacing:0; overflow:hidden;
@@ -188,6 +194,9 @@
     @page{ margin:12mm; }
     body{ max-width:none; padding:0; background:#fff; font-size:11px; }
     section, .actions, #msg, #stats, .sub, .hint{ display:none !important; }
+    #grid h3 .print-one{ display:none !important; }
+    body.print-one #grid h3:not(.keep), body.print-one #grid table:not(.keep){ display:none !important; }
+    body.print-one #grid table.keep{ page-break-after:auto; break-after:auto; }
     h1{ font-size:16px; margin:0 0 10px; }
     .ver{ display:none; }
     #grid h3{ margin:14px 0 6px; font-size:12px; }
@@ -206,7 +215,7 @@
 </head>
 <body>
 
-<h1>Periodica <span class="ver">1.4</span></h1>
+<h1>Periodica <span class="ver">1.5</span></h1>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -983,7 +992,8 @@ function renderGrid(model, assignment) {
 
   let html = "";
   for (const g of groups) {
-    html += "<h3>" + esc(heading(g)) + "</h3><table><tr><th>period</th>";
+    html += '<h3><span>' + esc(heading(g)) + '</span><button class="print-one" data-g="' + esc(g) + '" aria-label="Print ' + esc(g) + ' timetable">print</button></h3>'
+          + '<table data-g="' + esc(g) + '"><tr><th>period</th>';
     for (const d of days) html += "<th>" + esc(d) + "</th>";
     html += "</tr>";
 
@@ -1014,7 +1024,32 @@ function renderGrid(model, assignment) {
   $("grid").innerHTML = html;
 }
 
-$("print").onclick = () => window.print();
+function clearPrintOne() {
+  document.body.classList.remove("print-one");
+  for (const el of $("grid").querySelectorAll(".keep")) el.classList.remove("keep");
+}
+
+function printOne(g) {
+  const table = [...$("grid").querySelectorAll("table")].find(t => t.dataset.g === g);
+  if (!table) return;
+  clearPrintOne();
+  const head = table.previousElementSibling;
+  const oldTitle = document.title;
+  document.body.classList.add("print-one");
+  table.classList.add("keep");
+  if (head && head.tagName === "H3") head.classList.add("keep");
+  document.title = "Periodica - " + g;
+  const done = () => { clearPrintOne(); document.title = oldTitle; };
+  window.addEventListener("afterprint", done, { once: true });
+  window.print();
+}
+
+$("grid").addEventListener("click", e => {
+  const b = e.target.closest(".print-one");
+  if (b) printOne(b.dataset.g);
+});
+
+$("print").onclick = () => { clearPrintOne(); window.print(); };
 
 /* ================= run ================= */
 let lastResult = null;
