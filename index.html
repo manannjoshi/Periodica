@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlotZero 1.1</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, sans-serif; margin: 18px; color: #111; font-size: 14px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 14px; margin: 0 0 6px; display: flex; align-items: center; gap: 8px; }
+  .sub { color: #666; font-size: 12px; margin-bottom: 14px; }
+  section { border: 1px solid #ccc; padding: 10px; margin-bottom: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 6px; }
+  label { font-size: 12px; color: #444; }
+  input, select { font: inherit; font-size: 12px; padding: 3px 5px; border: 1px solid #aaa; }
+  input[type=number] { width: 70px; }
+  .w-code { width: 90px; } .w-sec { width: 60px; } .w-name { width: 130px; }
+  .w-days { width: 150px; }
+  button { font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; }
+  .del { padding: 1px 6px; color: #900; }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid #bbb; padding: 2px 4px; text-align: left; vertical-align: middle; }
+  th { background: #eee; font-weight: 600; }
+  #stats { font-family: monospace; font-size: 12px; white-space: pre; margin: 10px 0; }
+  #grid table { font-family: monospace; font-size: 11px; }
+  .cell { min-width: 115px; }
+  .empty { color: #bbb; }
+  .cont { display: block; color: #777; font-size: 10px; padding-left: 9px; }
+  #grid td.cell { padding: 0; }
+  #grid td.cell.empty { padding: 2px 4px; }
+  .ev { display: block; border-left: 3px solid hsl(var(--h) 60% 55%); padding: 3px 4px 3px 6px; }
+  .ev + .ev { margin-top: 3px; }
+  .clash { outline: 2px solid red; background: #fee; }
+  .actions { margin: 12px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .msg { font-size: 12px; color: #900; margin: 8px 0; white-space: pre-wrap; }
+  .hint { font-size: 11px; color: #777; }
+  #grid h3 { font-size: 13px; margin: 16px 0 4px; }
+  #grid table { margin-bottom: 10px; }
+  #grid td { min-width: 130px; }
+  .period { white-space: nowrap; color: #555; }
+  @media print {
+    section, .actions, #msg, #stats, .sub { display: none !important; }
+    body { margin: 0; }
+    #grid table { page-break-after: always; break-after: page; }
+    #grid table:last-child { page-break-after: auto; break-after: auto; }
+    h1 { font-size: 16px; margin: 0 0 8px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>SlotZero 1.1</h1>
+<div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
+
+<section>
+  <h2>Week structure</h2>
+  <div class="row">
+    <label>Days <input id="days" class="w-days" placeholder="Mon,Tue,Wed"></label>
+    <label>Start <input id="startTime" type="time" value="09:00"></label>
+    <label>Period <input id="periodMinutes" type="number" min="5" step="5" style="width:70px"> min</label>
+    <label>Break <input id="breakMinutes" type="number" min="0" step="5" style="width:60px"> min</label>
+    <label>Day ends by <input id="dayEnd" type="time" value="16:20"></label>
+  </div>
+  <div id="slotPreview" class="hint"></div>
+</section>
+
+<section>
+  <h2>Teachers <button id="addTeacher">+ add teacher</button></h2>
+  <table>
+    <thead><tr><th>name</th><th>unavailable days</th><th></th></tr></thead>
+    <tbody id="teacherRows"></tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Rooms <button id="addRoom">+ add room</button></h2>
+  <table>
+    <thead><tr><th>name</th><th>type</th><th>capacity</th><th></th></tr></thead>
+    <tbody id="roomRows"></tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Classes <button id="addCourse">+ add class</button></h2>
+  <table>
+    <thead><tr><th>course code</th><th>section</th><th>batch</th><th>teacher</th><th>blocks/week</th><th>periods/block</th><th>room type</th><th>students</th><th></th></tr></thead>
+    <tbody id="courseRows"></tbody>
+  </table>
+  <div class="hint" style="margin-top:6px">A block is a run of consecutive periods. Theory: 1 period per block. Lab: 2 periods per block. Leave batch blank for a whole-section class.</div>
+  <div class="row" style="margin-top:8px">
+    <label>copy section <select id="copyFrom"></select></label>
+    <label>as <input id="copyAs" class="w-sec" placeholder="G"></label>
+    <button id="doCopy">copy its classes</button>
+    <span class="hint">duplicates every class row of a section, batches included</span>
+  </div>
+</section>
+
+<div class="actions">
+  <button id="generate">Generate timetable</button>
+  <button id="sample">Load sample data</button>
+  <button id="clear">Clear all</button>
+  <button id="print">Print / save PDF</button>
+  <label style="margin-left:10px">view:
+    <select id="view">
+      <option value="section" selected>by section</option>
+      <option value="teacher">by teacher</option>
+      <option value="room">by room (admin)</option>
+    </select>
+  </label>
+</div>
+
+<div id="msg" class="msg"></div>
+<div id="stats">not run</div>
+<div id="grid"></div>
+
+<script>
+"use strict";
+
+/* ================= state ================= */
+const SAMPLE = {
+  days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+  startTime: "08:30",
+  dayEnd: "16:20",
+  periodMinutes: 50,
+  breakMinutes: 10,
+  teachers: [
+    { name: "Aarti",    unavail: ["Mon", "Tue"] },
+    { name: "Vipin",    unavail: ["Fri"] },
+    { name: "Richa",    unavail: [] },
+    { name: "Akanksha", unavail: [] },
+    { name: "Arohi",    unavail: ["Wed"] }
+  ],
+  rooms: [
+    { name: "R101", type: "class", capacity: 40 },
+    { name: "R102", type: "class", capacity: 40 },
+    { name: "LAB1", type: "lab",   capacity: 30 },
+    { name: "LAB2", type: "lab",   capacity: 30 }
+  ],
+  courses: [
+    // section F
+    { code: "CSL120", section: "F", batch: "",     teacher: "Aarti",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MAL151", section: "F", batch: "",     teacher: "Vipin",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "FOCP",   section: "F", batch: "",     teacher: "Richa",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "CSL110", section: "F", batch: "",     teacher: "Akanksha", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MEP110", section: "F", batch: "CS11", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "MEP110", section: "F", batch: "CS12", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
+    // section G
+    { code: "CSL120", section: "G", batch: "",     teacher: "Aarti",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MAL151", section: "G", batch: "",     teacher: "Vipin",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "FOCP",   section: "G", batch: "",     teacher: "Richa",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "CSL110", section: "G", batch: "",     teacher: "Akanksha", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MEP110", section: "G", batch: "CS11", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "MEP110", section: "G", batch: "CS12", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 }
+  ]
+};
+
+const KEY = "slotzero.data.v5";
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* fall through */ }
+  return clone(SAMPLE);
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+/* ================= helpers ================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function parseTime(s) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
+}
+function fmt(mins) {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+}
+
+/* periods of one day: 50 min class, 10 min break */
+function periodTemplate() {
+  const len = Math.max(0, Math.floor(Number(state.periodMinutes) || 0));
+  const br = Math.max(0, Math.floor(Number(state.breakMinutes) || 0));
+  const start = parseTime(state.startTime);
+  const end = parseTime(state.dayEnd);
+  if (start == null || end == null || len === 0 || end <= start) return [];
+
+  const out = [];
+  let cur = start;
+  while (cur + len <= end) {
+    out.push({ start: cur, end: cur + len });
+    cur += len + br;
+  }
+  return out;
+}
+
+/* ================= rendering: inputs ================= */
+function teacherNames() { return state.teachers.map(t => t.name).filter(Boolean); }
+
+function renderSlotPreview() {
+  const t = periodTemplate();
+  if (!t.length) {
+    $("slotPreview").textContent = "Check the start time, period length and periods per day.";
+    return;
+  }
+  const one = t.map(x => fmt(x.start) + "–" + fmt(x.end)).join(", ");
+  const two = t.length >= 2 ? "  |  2-period block: " + fmt(t[0].start) + "–" + fmt(t[1].end) : "";
+  $("slotPreview").textContent = "Each day (" + t.length + " periods): " + one + two;
+}
+
+function renderWeek() {
+  $("days").value = state.days.join(",");
+  $("startTime").value = state.startTime || "09:00";
+  $("periodMinutes").value = state.periodMinutes || 50;
+  $("breakMinutes").value = state.breakMinutes || 10;
+  $("dayEnd").value = state.dayEnd || "16:20";
+  renderSlotPreview();
+}
+
+function renderTeachers() {
+  $("teacherRows").innerHTML = state.teachers.map((t, i) => `
+    <tr>
+      <td><input class="w-name" data-tbl="teachers" data-i="${i}" data-f="name" value="${esc(t.name)}"></td>
+      <td><input class="w-days" data-tbl="teachers" data-i="${i}" data-f="unavail" value="${esc((t.unavail || []).join(", "))}" placeholder="Mon, Tue"></td>
+      <td><button class="del" data-del="teachers" data-i="${i}">x</button></td>
+    </tr>`).join("");
+}
+
+function renderRooms() {
+  $("roomRows").innerHTML = state.rooms.map((r, i) => `
+    <tr>
+      <td><input class="w-name" data-tbl="rooms" data-i="${i}" data-f="name" value="${esc(r.name)}"></td>
+      <td><select data-tbl="rooms" data-i="${i}" data-f="type">
+        <option value="class"${r.type === "class" ? " selected" : ""}>class</option>
+        <option value="lab"${r.type === "lab" ? " selected" : ""}>lab</option>
+      </select></td>
+      <td><input type="number" min="0" data-tbl="rooms" data-i="${i}" data-f="capacity" value="${esc(r.capacity)}"></td>
+      <td><button class="del" data-del="rooms" data-i="${i}">x</button></td>
+    </tr>`).join("");
+}
+
+function renderCourses() {
+  const names = teacherNames();
+  $("courseRows").innerHTML = state.courses.map((c, i) => {
+    const opts = names.slice();
+    if (c.teacher && !opts.includes(c.teacher)) opts.unshift(c.teacher);
+    const teacherOpts = opts.map(n =>
+      `<option value="${esc(n)}"${n === c.teacher ? " selected" : ""}>${esc(n)}${names.includes(n) ? "" : " (missing)"}</option>`
+    ).join("");
+    return `
+    <tr>
+      <td><input class="w-code" data-tbl="courses" data-i="${i}" data-f="code" value="${esc(c.code)}"></td>
+      <td><input class="w-sec" data-tbl="courses" data-i="${i}" data-f="section" value="${esc(c.section)}"></td>
+      <td><input class="w-sec" data-tbl="courses" data-i="${i}" data-f="batch" value="${esc(c.batch || "")}" placeholder="all"></td>
+      <td><select data-tbl="courses" data-i="${i}" data-f="teacher">${teacherOpts}</select></td>
+      <td><input type="number" min="1" max="40" data-tbl="courses" data-i="${i}" data-f="blocksPerWeek" value="${esc(c.blocksPerWeek)}"></td>
+      <td><input type="number" min="1" max="14" data-tbl="courses" data-i="${i}" data-f="blockPeriods" value="${esc(c.blockPeriods)}"></td>
+      <td><select data-tbl="courses" data-i="${i}" data-f="roomType">
+        <option value="class"${c.roomType === "class" ? " selected" : ""}>class</option>
+        <option value="lab"${c.roomType === "lab" ? " selected" : ""}>lab</option>
+      </select></td>
+      <td><input type="number" min="0" data-tbl="courses" data-i="${i}" data-f="size" value="${esc(c.size)}"></td>
+      <td><button class="del" data-del="courses" data-i="${i}">x</button></td>
+    </tr>`;
+  }).join("");
+
+  const secs = [...new Set(state.courses.map(c => c.section).filter(Boolean))];
+  const sel = $("copyFrom");
+  const prev = sel.value;
+  sel.innerHTML = secs.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  if (secs.includes(prev)) sel.value = prev;
+}
+
+function renderAll() {
+  renderWeek();
+  renderTeachers();
+  renderRooms();
+  renderCourses();
+}
+
+/* ================= input handling ================= */
+document.addEventListener("input", e => {
+  const t = e.target;
+  const tbl = t.dataset.tbl;
+  if (!tbl) return;
+  const i = +t.dataset.i, f = t.dataset.f;
+  if (!state[tbl] || !state[tbl][i]) return;
+
+  if (f === "unavail") {
+    state[tbl][i].unavail = t.value.split(",").map(s => s.trim()).filter(Boolean);
+  } else if (["blocksPerWeek", "blockPeriods", "capacity", "size"].includes(f)) {
+    state[tbl][i][f] = Number(t.value) || 0;
+  } else {
+    state[tbl][i][f] = t.value;
+    if (tbl === "teachers" && f === "name") renderCourses();
+  }
+  save();
+});
+
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.tbl) {
+    const tbl = t.dataset.tbl, i = +t.dataset.i, f = t.dataset.f;
+    if (state[tbl] && state[tbl][i]) {
+      state[tbl][i][f] = t.value;
+      save();
+      if (tbl === "teachers" && f === "name") renderCourses();
+    }
+  }
+});
+
+document.addEventListener("click", e => {
+  const d = e.target.dataset;
+  if (d.del) {
+    state[d.del].splice(+d.i, 1);
+    save();
+    renderAll();
+  }
+});
+
+$("days").addEventListener("input", e => {
+  state.days = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+  save();
+  renderSlotPreview();
+});
+$("startTime").addEventListener("input", e => { state.startTime = e.target.value; save(); renderSlotPreview(); });
+$("periodMinutes").addEventListener("input", e => { state.periodMinutes = Number(e.target.value) || 0; save(); renderSlotPreview(); });
+$("breakMinutes").addEventListener("input", e => { state.breakMinutes = Number(e.target.value) || 0; save(); renderSlotPreview(); });
+$("dayEnd").addEventListener("input", e => { state.dayEnd = e.target.value; save(); renderSlotPreview(); });
+
+$("addTeacher").onclick = () => { state.teachers.push({ name: "", unavail: [] }); save(); renderTeachers(); renderCourses(); };
+$("addRoom").onclick = () => { state.rooms.push({ name: "", type: "class", capacity: 40 }); save(); renderRooms(); };
+$("doCopy").onclick = () => {
+  const from = $("copyFrom").value;
+  const to = ($("copyAs").value || "").trim();
+  if (!from || !to || to === from) return;
+  const rows = state.courses.filter(c => c.section === from).map(c => ({ ...c, section: to }));
+  if (!rows.length) return;
+  state.courses.push(...rows);
+  save();
+  renderCourses();
+  $("copyAs").value = "";
+};
+
+$("addCourse").onclick = () => {
+  state.courses.push({ code: "", section: "", batch: "", teacher: teacherNames()[0] || "", blocksPerWeek: 1, blockPeriods: 1, roomType: "class", size: 40 });
+  save();
+  renderCourses();
+};
+
+$("sample").onclick = () => {
+  if (!confirm("Replace the current tables with the sample data?")) return;
+  state = clone(SAMPLE);
+  save();
+  renderAll();
+  lastResult = null;
+  $("stats").textContent = "not run";
+  $("grid").innerHTML = "";
+  $("msg").textContent = "";
+};
+
+$("clear").onclick = () => {
+  if (!confirm("Clear all teachers, rooms and classes?")) return;
+  state = { days: ["Mon", "Tue", "Wed", "Thu", "Fri"], startTime: "08:30", dayEnd: "16:20", periodMinutes: 50, breakMinutes: 10, teachers: [], rooms: [], courses: [] };
+  save();
+  renderAll();
+  lastResult = null;
+  $("stats").textContent = "not run";
+  $("grid").innerHTML = "";
+  $("msg").textContent = "";
+};
+
+/* ================= model ================= */
+function buildModel() {
+  const periods = periodTemplate();
+  const per = periods.length;
+
+  const slots = [];
+  for (const d of state.days)
+    for (let k = 0; k < per; k++)
+      slots.push({
+        day: d, index: k,
+        start: periods[k].start, end: periods[k].end,
+        label: fmt(periods[k].start) + "–" + fmt(periods[k].end)
+      });
+
+  const rooms = state.rooms.filter(r => r.name).map(r => ({
+    name: r.name, type: r.type, capacity: Number(r.capacity) || 0
+  }));
+
+  const teacherByName = {};
+  for (const t of state.teachers) if (t.name) teacherByName[t.name] = { name: t.name, unavail: t.unavail || [] };
+
+  const sessions = [];
+  for (const c of state.courses) {
+    const n = Math.max(0, Math.floor(Number(c.blocksPerWeek) || 0));
+    const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
+    for (let k = 0; k < n; k++) {
+      sessions.push({
+        code: c.code, section: c.section, batch: c.batch || "", teacher: c.teacher,
+        roomType: c.roomType, size: Number(c.size) || 0, span
+      });
+    }
+  }
+
+  return { slots, rooms, teacherByName, sessions, per };
+}
+
+function isOff(t, day) {
+  if (!t) return false;
+  return (t.unavail || []).some(d => String(d).toLowerCase() === String(day).toLowerCase());
+}
+
+/* start positions where a block of `span` periods fits inside one day */
+function startsFor(slots, per, span) {
+  const out = [];
+  for (let si = 0; si < slots.length; si++) {
+    if (si + span - 1 >= slots.length) break;
+    if (Math.floor(si / per) !== Math.floor((si + span - 1) / per)) continue;
+    out.push(si);
+  }
+  return out;
+}
+
+/* ================= validation / diagnosis ================= */
+function diagnose(model) {
+  const { slots, rooms, teacherByName, sessions, per } = model;
+  const out = [];
+
+  if (!state.days.length) out.push("No teaching days defined.");
+  if (parseTime(state.dayEnd) == null) out.push("Day end time is not valid.");
+  else if (parseTime(state.startTime) != null && parseTime(state.dayEnd) <= parseTime(state.startTime)) out.push("The day ends before it starts.");
+  if (!per) out.push("No period fits between the start and end time. Check start, end, period length and break.");
+  if (!rooms.length) out.push("No rooms defined.");
+  if (!sessions.length) out.push("No classes defined.");
+
+  const seen = new Set();
+  for (const c of state.courses) {
+    if (!c.code) out.push("A class row has no course code.");
+    if (!c.section) out.push(`${c.code || "(no code)"}: no section.`);
+    if (c.teacher && !teacherByName[c.teacher]) out.push(`${c.code || "(no code)"}: teacher "${c.teacher}" is not in the teachers table.`);
+    if (Number(c.blocksPerWeek) <= 0) out.push(`${c.code || "(no code)"} ${c.section}: blocks/week must be at least 1.`);
+    if (Number(c.blockPeriods) < 1) out.push(`${c.code || "(no code)"} ${c.section}: a block needs at least 1 period.`);
+    if (per && Number(c.blockPeriods) > per) out.push(`${c.code || "(no code)"} ${c.section}: block of ${c.blockPeriods} periods does not fit in a day of ${per}.`);
+    const key = (c.code || "") + "|" + (c.section || "") + "|" + (c.batch || "");
+    if (c.code && seen.has(key)) out.push(`${c.code} ${c.section}${c.batch ? "/" + c.batch : ""}: duplicate class row.`);
+    seen.add(key);
+  }
+
+  const reported = new Set();
+  for (const s of sessions) {
+    const roomCandidates = rooms.filter(r => r.type === s.roomType && r.capacity >= s.size);
+    if (!roomCandidates.length) {
+      const m = `${s.code} ${s.section}: no ${s.roomType} room with capacity >= ${s.size}.`;
+      if (!reported.has(m)) { out.push(m); reported.add(m); }
+    }
+    const t = teacherByName[s.teacher];
+    if (t) {
+      const availDays = state.days.filter(d => !isOff(t, d));
+      if (!availDays.length) {
+        const m = `${s.code}: ${s.teacher} is unavailable every day.`;
+        if (!reported.has(m)) { out.push(m); reported.add(m); }
+      }
+    }
+  }
+
+  // capacity: count periods, not blocks
+  for (const type of ["class", "lab"]) {
+    const demand = sessions.filter(s => s.roomType === type).reduce((a, s) => a + s.span, 0);
+    const capacity = slots.length * rooms.filter(r => r.type === type).length;
+    if (demand > capacity) out.push(`${type} rooms: ${demand} periods needed, only ${capacity} slot-room places exist.`);
+  }
+
+  // section capacity
+  const bySection = {};
+  for (const s of sessions) bySection[s.section] = (bySection[s.section] || 0) + s.span;
+  for (const [sec, demand] of Object.entries(bySection))
+    if (demand > slots.length) out.push(`section ${sec}: needs ${demand} periods, only ${slots.length} exist.`);
+
+  return [...new Set(out)];
+}
+
+/* ================= solver ================= */
+function solve(model) {
+  const { slots, rooms, teacherByName, sessions, per } = model;
+
+  const domains = sessions.map(s => {
+    const t = teacherByName[s.teacher];
+    const dom = [];
+    for (const si of startsFor(slots, per, s.span)) {
+      if (isOff(t, slots[si].day)) continue;
+      for (const r of rooms) {
+        if (r.type !== s.roomType) continue;
+        if (r.capacity < s.size) continue;
+        dom.push({ si, room: r.name });
+      }
+    }
+    return dom;
+  });
+
+  const assignment = new Array(sessions.length).fill(null);
+  const teacherBusy = {}, roomBusy = {}, sectionBusy = {};
+  let steps = 0;
+  const MAX_STEPS = 800000;
+
+  function add(m, k, si) { (m[k] || (m[k] = new Set())).add(si); }
+  function del(m, k, si) { if (m[k]) m[k].delete(si); }
+
+  function fits(s, v) {
+    for (let k = 0; k < s.span; k++) {
+      const p = v.si + k;
+      if (teacherBusy[s.teacher] && teacherBusy[s.teacher].has(p)) return false;
+      if (roomBusy[v.room] && roomBusy[v.room].has(p)) return false;
+      if (sectionBusy[s.section] && sectionBusy[s.section].has(p)) return false;
+    }
+    return true;
+  }
+
+  function occupy(s, v, on) {
+    const fn = on ? add : del;
+    for (let k = 0; k < s.span; k++) {
+      fn(teacherBusy, s.teacher, v.si + k);
+      fn(roomBusy, v.room, v.si + k);
+      fn(sectionBusy, s.section, v.si + k);
+    }
+  }
+
+  function backtrack() {
+    if (++steps > MAX_STEPS) return false;
+
+    let pick = -1, pickVals = null, pickLen = Infinity;
+    for (let i = 0; i < sessions.length; i++) {
+      if (assignment[i]) continue;
+      const s = sessions[i];
+      const vals = domains[i].filter(v => fits(s, v));
+      if (vals.length === 0) return false;
+      if (vals.length < pickLen) { pickLen = vals.length; pick = i; pickVals = vals; }
+    }
+    if (pick === -1) return true;
+
+    const s = sessions[pick];
+
+    const scored = pickVals.map(v => {
+      let p = 0;
+      const day = slots[v.si].day;
+      for (let i = 0; i < sessions.length; i++) {
+        const a = assignment[i];
+        if (!a) continue;
+        const t = sessions[i];
+        if (slots[a.si].day !== day) continue;
+        if (t.code === s.code && t.section === s.section) p += 6;   // same subject twice in one day
+        if (t.section === s.section) p += 2 * t.span;                 // keep the section's days even
+        if (t.teacher === s.teacher) p += 3 * t.span;                 // and the teacher's
+      }
+      return { v, p };
+    });
+    scored.sort((x, y) => x.p - y.p);
+
+    for (const { v } of scored) {
+      assignment[pick] = v;
+      occupy(s, v, true);
+
+      if (backtrack()) return true;
+
+      assignment[pick] = null;
+      occupy(s, v, false);
+    }
+    return false;
+  }
+
+  const ok = backtrack();
+  if (ok) {
+    const better = improve(model, assignment, domains);
+    for (let i = 0; i < assignment.length; i++) assignment[i] = better[i];
+  }
+  return { ok, assignment, steps, domains };
+}
+
+/* ================= balancing pass ================= */
+function cost(model, assignment) {
+  const { slots, sessions } = model;
+  const secDay = {}, secPer = {}, teaDay = {}, teaPer = {}, courseDay = {};
+  const secOcc = {}, teaOcc = {};
+
+  const bump = (m, k1, k2) => { const o = m[k1] || (m[k1] = {}); o[k2] = (o[k2] || 0) + 1; };
+  const sq = o => { let t = 0; for (const k in o) t += o[k] * o[k]; return t; };
+
+  function touch(map, key, si, span) {
+    const set = map[key] || (map[key] = new Set());
+    for (let k = 0; k < span; k++) set.add(slots[si + k].index);
+  }
+
+  for (let i = 0; i < assignment.length; i++) {
+    const a = assignment[i];
+    if (!a) continue;
+    const s = sessions[i], sl = slots[a.si];
+    bump(secDay, s.section, sl.day);
+    bump(secPer, s.section, sl.index);
+    bump(teaDay, s.teacher, sl.day);
+    bump(teaPer, s.teacher, sl.index);
+
+    const cd = s.code + "|" + s.section + "|" + sl.day;
+    courseDay[cd] = (courseDay[cd] || 0) + 1;
+
+    touch(secOcc, s.section + "|" + sl.day, a.si, s.span);
+    touch(teaOcc, s.teacher + "|" + sl.day, a.si, s.span);
+  }
+
+  let c = 0;
+  for (const k in secDay) c += 3 * sq(secDay[k]);
+  for (const k in teaDay) c += 2 * sq(teaDay[k]);
+  for (const k in secPer) c += sq(secPer[k]);
+  for (const k in teaPer) c += sq(teaPer[k]);
+
+  for (const k in courseDay) if (courseDay[k] > 1) c += 100 * (courseDay[k] - 1);
+
+  function gapPenalty(map, weight) {
+    let t = 0;
+    for (const k in map) {
+      const set = map[k];
+      let lo = Infinity, hi = -Infinity;
+      for (const x of set) { if (x < lo) lo = x; if (x > hi) hi = x; }
+      t += weight * ((hi - lo + 1) - set.size);
+    }
+    return t;
+  }
+  c += gapPenalty(secOcc, 6);
+  c += gapPenalty(teaOcc, 3);
+
+  return c;
+}
+
+function improve(model, assignment, domains) {
+  const { sessions } = model;
+  const a = assignment.map(v => (v ? { si: v.si, room: v.room } : null));
+
+  function legal(i, si, room) {
+    for (let k = 0; k < sessions[i].span; k++) {
+      const p = si + k;
+      for (let j = 0; j < a.length; j++) {
+        if (j === i || !a[j]) continue;
+        const s2 = sessions[j];
+        if (a[j].si <= p && p < a[j].si + s2.span) {
+          if (s2.teacher === sessions[i].teacher) return false;
+          if (a[j].room === room) return false;
+          if (s2.section === sessions[i].section) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  let base = cost(model, a);
+
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false;
+
+    for (let i = 0; i < sessions.length; i++) {
+      const cur = a[i];
+      let bestCost = base, best = null;
+
+      for (const v of domains[i]) {
+        if (v.si === cur.si && v.room === cur.room) continue;
+        if (!legal(i, v.si, v.room)) continue;
+        a[i] = v;
+        const c = cost(model, a);
+        if (c < bestCost) { bestCost = c; best = v; }
+      }
+
+      a[i] = best || cur;
+      if (best) { base = bestCost; changed = true; }
+    }
+
+    if (!changed) break;
+  }
+
+  return a;
+}
+
+function naive(model) {
+  const { slots, rooms, teacherByName, sessions, per } = model;
+  const assignment = new Array(sessions.length).fill(null);
+  const teacherBusy = {}, roomBusy = {}, sectionBusy = {};
+
+  function free(s, si, room) {
+    for (let k = 0; k < s.span; k++) {
+      const p = si + k;
+      if (teacherBusy[s.teacher] && teacherBusy[s.teacher].has(p)) return false;
+      if (roomBusy[room] && roomBusy[room].has(p)) return false;
+      if (sectionBusy[s.section] && sectionBusy[s.section].has(p)) return false;
+    }
+    return true;
+  }
+  function take(s, si, room, on) {
+    for (let k = 0; k < s.span; k++) {
+      const p = si + k;
+      if (on) {
+        (teacherBusy[s.teacher] || (teacherBusy[s.teacher] = new Set())).add(p);
+        (roomBusy[room] || (roomBusy[room] = new Set())).add(p);
+        (sectionBusy[s.section] || (sectionBusy[s.section] = new Set())).add(p);
+      } else {
+        teacherBusy[s.teacher].delete(p);
+        roomBusy[room].delete(p);
+        sectionBusy[s.section].delete(p);
+      }
+    }
+  }
+
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    outer:
+    for (const si of startsFor(slots, per, s.span)) {
+      if (isOff(teacherByName[s.teacher], slots[si].day)) continue;
+      for (const r of rooms) {
+        if (r.type !== s.roomType || r.capacity < s.size) continue;
+        if (!free(s, si, r.name)) continue;
+        assignment[i] = { si, room: r.name };
+        take(s, si, r.name, true);
+        break outer;
+      }
+    }
+  }
+  return { assignment, unplaced: assignment.filter(a => !a).length };
+}
+
+/* ================= verification ================= */
+function label(s) {
+  const g = (s.section || "?") + (s.batch ? "/" + s.batch : "");
+  return (s.code || "?") + " " + g;
+}
+
+function verify(model, assignment) {
+  const { slots, rooms, teacherByName, sessions } = model;
+  const roomByName = {};
+  for (const r of rooms) roomByName[r.name] = r;
+
+  const problems = [];
+  const occ = []; // every occupied period of every placed class
+
+  for (let i = 0; i < assignment.length; i++) {
+    const a = assignment[i];
+    if (!a) continue;
+    const s = sessions[i];
+
+    const room = roomByName[a.room];
+    if (!room) problems.push(`${label(s)}: room "${a.room}" does not exist`);
+    else {
+      if (room.type !== s.roomType) problems.push(`${label(s)}: ${room.name} is a ${room.type} room, needs ${s.roomType}`);
+      if (room.capacity < s.size) problems.push(`${label(s)}: ${room.name} holds ${room.capacity}, needs ${s.size}`);
+    }
+
+    const t = teacherByName[s.teacher];
+    if (!t) problems.push(`${label(s)}: teacher "${s.teacher}" does not exist`);
+    else if (isOff(t, slots[a.si].day)) problems.push(`${label(s)}: ${t.name} is unavailable on ${slots[a.si].day}`);
+
+    for (let k = 0; k < s.span; k++) occ.push({ si: a.si + k, idx: i, start: a.si, room: a.room });
+  }
+
+  for (let a = 0; a < occ.length; a++) {
+    for (let b = a + 1; b < occ.length; b++) {
+      const x = occ[a], y = occ[b];
+      if (x.si !== y.si) continue;
+      if (x.idx === y.idx) continue;
+      const s = sessions[x.idx], t = sessions[y.idx];
+      const at = slots[x.si].day + " " + slots[x.si].label;
+      if (s.teacher === t.teacher) problems.push(`teacher ${s.teacher} double-booked at ${at}: ${label(s)} + ${label(t)}`);
+      if (x.room === y.room) problems.push(`room ${x.room} double-booked at ${at}: ${label(s)} + ${label(t)}`);
+      if (s.section === t.section) problems.push(`section ${s.section} double-booked at ${at}: ${label(s)} + ${label(t)}`);
+    }
+  }
+  return problems;
+}
+
+/* ================= quality metrics ================= */
+function repeatCount(model, assignment) {
+  const list = [];
+  for (let i = 0; i < assignment.length; i++) if (assignment[i]) list.push(i);
+  let n = 0;
+  for (let a = 0; a < list.length; a++)
+    for (let b = a + 1; b < list.length; b++) {
+      const s = model.sessions[list[a]], t = model.sessions[list[b]];
+      if (s.code === t.code && s.section === t.section && (s.batch || "") === (t.batch || "") &&
+          model.slots[assignment[list[a]].si].day === model.slots[assignment[list[b]].si].day) n++;
+    }
+  return n;
+}
+
+function usedPeriods(model, assignment) {
+  return assignment.reduce((a, v, i) => a + (v ? model.sessions[i].span : 0), 0);
+}
+
+/* ================= grid ================= */
+function courseHue(code) {
+  let h = 0;
+  for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) % 360;
+  return h;
+}
+
+function renderGrid(model, assignment) {
+  const view = $("view").value;
+  const { slots, sessions } = model;
+
+  let groups;
+  if (view === "room") groups = model.rooms.map(r => r.name);
+  else if (view === "section") groups = [...new Set(state.courses.map(c => c.section).filter(Boolean))];
+  else groups = [...new Set(state.courses.map(c => c.teacher).filter(Boolean))];
+
+  const days = [...new Set(slots.map(s => s.day))];
+  const per = slots.length / days.length;
+
+  const cellMap = {};
+  for (let i = 0; i < assignment.length; i++) {
+    const a = assignment[i];
+    if (!a) continue;
+    const s = sessions[i];
+    const g = view === "room" ? a.room : view === "section" ? s.section : s.teacher;
+    for (let k = 0; k < s.span; k++) {
+      const key = (a.si + k) + "|" + g;
+      (cellMap[key] || (cellMap[key] = [])).push({ i, start: a.si });
+    }
+  }
+
+  const heading = {
+    room: g => "Room " + g,
+    section: g => "Section " + g,
+    teacher: g => g
+  }[view];
+
+  let html = "";
+  for (const g of groups) {
+    html += "<h3>" + esc(heading(g)) + "</h3><table><tr><th>period</th>";
+    for (const d of days) html += "<th>" + esc(d) + "</th>";
+    html += "</tr>";
+
+    for (let k = 0; k < per; k++) {
+      html += '<tr><td class="period">' + esc(slots[k].label) + "</td>";
+      for (let di = 0; di < days.length; di++) {
+        const si = di * per + k;
+        const list = cellMap[si + "|" + g] || [];
+        if (!list.length) { html += '<td class="cell empty">—</td>'; continue; }
+
+        const body = list.map(x => {
+          const s = sessions[x.i];
+          const room = assignment[x.i].room;
+          const tag = s.batch ? "/" + esc(s.batch) : "";
+          if (x.start !== si) return '<span class="cont">↳ ' + esc(s.code) + tag + "</span>";
+          const tint = ' class="ev" style="--h:' + courseHue(s.code) + '"';
+          const tail = s.span > 1 ? " ·" + s.span + "p" : "";
+          if (view === "room") return "<span" + tint + ">" + esc(s.code) + " " + esc(s.section) + tag + " (" + esc(s.teacher) + ")" + tail + "</span>";
+          if (view === "section") return "<span" + tint + ">" + esc(s.code) + tag + " (" + esc(s.teacher) + ") · " + esc(room) + tail + "</span>";
+          return "<span" + tint + ">" + esc(s.code) + " " + esc(s.section) + tag + " · " + esc(room) + tail + "</span>";
+        }).join("<br>");
+
+        html += '<td class="cell' + (list.length > 1 ? " clash" : "") + '">' + body + "</td>";
+      }
+      html += "</tr>";
+    }
+    html += "</table>";
+  }
+  $("grid").innerHTML = html;
+}
+
+$("print").onclick = () => window.print();
+
+/* ================= run ================= */
+let lastResult = null;
+
+$("generate").onclick = () => {
+  $("msg").textContent = "";
+  lastResult = null;
+
+  const model = buildModel();
+  const problems = diagnose(model);
+
+  if (problems.length) {
+    $("msg").textContent = "Fix these first:\n- " + problems.join("\n- ");
+    $("stats").textContent = "not run";
+    $("grid").innerHTML = "";
+    return;
+  }
+
+  const t0 = performance.now();
+  const res = solve(model);
+  const ms = (performance.now() - t0).toFixed(1);
+
+  if (!res.ok) {
+    const stuck = res.domains.filter(d => d.length === 0).length;
+    $("msg").textContent =
+      "No valid timetable exists with these rules.\n" +
+      (stuck ? stuck + " block(s) have no legal place at all.\n" : "") +
+      "Try adding a room, freeing a teacher, or shortening a block.";
+    $("stats").textContent = "steps: " + res.steps + "   time: " + ms + " ms";
+    $("grid").innerHTML = "";
+    return;
+  }
+
+  const placed = res.assignment.filter(Boolean).length;
+  const clashes = verify(model, res.assignment);
+  const repeats = repeatCount(model, res.assignment);
+  const periodsUsed = usedPeriods(model, res.assignment);
+
+  const n = naive(model);
+  const nClashes = verify(model, n.assignment);
+
+  $("stats").textContent =
+    "blocks:           " + model.sessions.length + "\n" +
+    "placed:           " + placed + "\n" +
+    "periods used:     " + periodsUsed + "\n" +
+    "verified clashes: " + (clashes.length ? "\n  " + clashes.join("\n  ") : "0") + "\n" +
+    "same course twice in a day: " + repeats + "\n" +
+    "solver steps:     " + res.steps + "\n" +
+    "solve time:       " + ms + " ms\n" +
+    "--- naive first-fit, same data ---\n" +
+    "placed:           " + (model.sessions.length - n.unplaced) + " / " + model.sessions.length +
+      (n.unplaced ? "   (" + n.unplaced + " unscheduled)" : "") + "\n" +
+    "verified clashes: " + (nClashes.length ? nClashes.length : "0");
+
+  renderGrid(model, res.assignment);
+  lastResult = { model, assignment: res.assignment };
+};
+
+$("view").onchange = () => {
+  if (lastResult) renderGrid(lastResult.model, lastResult.assignment);
+};
+
+/* ================= boot ================= */
+renderAll();
+</script>
+</body>
+</html>

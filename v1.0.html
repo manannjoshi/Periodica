@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlotZero 1.0 — core</title>
+<style>
+  body { font-family: monospace; margin: 20px; color: #111; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #666; font-size: 12px; margin-bottom: 14px; }
+  button { font-family: monospace; padding: 6px 12px; margin-right: 8px; cursor: pointer; }
+  #stats { margin: 12px 0; font-size: 13px; white-space: pre; }
+  table { border-collapse: collapse; font-size: 11px; }
+  th, td { border: 1px solid #999; padding: 3px 5px; text-align: left; vertical-align: top; }
+  th { background: #eee; }
+  .cell { min-width: 120px; }
+  .empty { color: #bbb; }
+  .clash { outline: 2px solid red; }
+  details { margin-top: 14px; font-size: 12px; }
+  pre { background: #f5f5f5; padding: 8px; overflow: auto; max-height: 260px; }
+</style>
+</head>
+<body>
+<h1>SlotZero 1.0 — core solver</h1>
+<div class="sub">Fixed seeded dataset. Generate a clash-free weekly timetable.</div>
+
+<button id="gen">Generate</button>
+<button id="reset">Reset</button>
+
+<div id="stats">not run</div>
+<div id="grid"></div>
+
+<details><summary>dataset (read-only)</summary><pre id="dataset"></pre></details>
+
+<script>
+"use strict";
+
+/* ---------------- seeded dataset ---------------- */
+
+const TIMES = ["09:00", "11:00", "14:00"];
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+const rooms = [
+  { id: "R101", type: "class", capacity: 40 },
+  { id: "R102", type: "class", capacity: 40 },
+  { id: "LAB1", type: "lab",   capacity: 30 },
+  { id: "LAB2", type: "lab",   capacity: 30 }
+];
+
+const teachers = [
+  { id: "T1", name: "Aarti",    unavail: ["Mon", "Tue"] },
+  { id: "T2", name: "Vipin",    unavail: ["Fri"] },
+  { id: "T3", name: "Richa",    unavail: [] },
+  { id: "T4", name: "Akanksha", unavail: [] },
+  { id: "T5", name: "Arohi",    unavail: ["Wed"] }
+];
+const teacherById = Object.fromEntries(teachers.map(t => [t.id, t]));
+
+const courses = [
+  { code: "CSL120", teacher: "T1", hours: 3, roomType: "class", size: 40 },
+  { code: "MAL151", teacher: "T2", hours: 3, roomType: "class", size: 40 },
+  { code: "FOCP",   teacher: "T3", hours: 3, roomType: "class", size: 40 },
+  { code: "CSL110", teacher: "T4", hours: 3, roomType: "class", size: 40 },
+  { code: "MEP110", teacher: "T5", hours: 3, roomType: "lab",   size: 30 }
+];
+
+const sections = ["F1", "F2"];
+
+// build slots: 5 days x 4 times
+const slots = [];
+for (const d of DAYS) for (const t of TIMES) slots.push({ day: d, time: t });
+
+// expand courses x sections into individual sessions (one per contact hour)
+const sessions = [];
+for (const c of courses) for (const sec of sections) for (let h = 0; h < c.hours; h++) {
+  sessions.push({
+    id: sessions.length,
+    code: c.code, teacher: c.teacher, section: sec,
+    roomType: c.roomType, size: c.size
+  });
+}
+
+document.getElementById("dataset").textContent =
+  JSON.stringify({ rooms, teachers, courses, sections, slots, sessions: sessions.length }, null, 2);
+
+/* ---------------- soft rule: avoid 09:00 ---------------- */
+function softPenalty(val) {
+  return slots[val.si].time === "09:00" ? 1 : 0;
+}
+
+/* ---------------- static domains ---------------- */
+// every (slot, room) pair that is structurally legal for a session
+function buildDomains() {
+  return sessions.map(s => {
+    const dom = [];
+    const t = teacherById[s.teacher];
+    for (let si = 0; si < slots.length; si++) {
+      if (t.unavail.includes(slots[si].day)) continue;
+      for (const r of rooms) {
+        if (r.type !== s.roomType) continue;
+        if (r.capacity < s.size) continue;
+        dom.push({ si, room: r.id });
+      }
+    }
+    return dom;
+  });
+}
+
+/* ---------------- solver: backtracking + MRV + forward checking ---------------- */
+function solve() {
+  const domains = buildDomains();
+  const assignment = new Array(sessions.length).fill(null);
+  const teacherBusy = {};   // teacherId -> Set(slotIndex)
+  const roomBusy = {};      // roomId    -> Set(slotIndex)
+  const sectionBusy = {};   // section   -> Set(slotIndex)
+  let steps = 0;
+  const MAX_STEPS = 2000000;
+
+  function busy(setMap, key) {
+    return setMap[key] ? setMap[key].has : null;
+  }
+  function add(setMap, key, si) {
+    (setMap[key] || (setMap[key] = new Set())).add(si);
+  }
+  function del(setMap, key, si) {
+    if (setMap[key]) setMap[key].delete(si);
+  }
+
+  function backtrack() {
+    if (++steps > MAX_STEPS) return false;
+
+    // pick unassigned session with fewest currently-valid values (MRV + forward check)
+    let pick = -1, pickVals = null, pickLen = Infinity;
+    for (let i = 0; i < sessions.length; i++) {
+      if (assignment[i]) continue;
+      const s = sessions[i];
+      const vals = [];
+      for (const v of domains[i]) {
+        if (teacherBusy[s.teacher] && teacherBusy[s.teacher].has(v.si)) continue;
+        if (roomBusy[v.room] && roomBusy[v.room].has(v.si)) continue;
+        if (sectionBusy[s.section] && sectionBusy[s.section].has(v.si)) continue;
+        vals.push(v);
+      }
+      if (vals.length === 0) return false;           // dead end, back up now
+      if (vals.length < pickLen) { pickLen = vals.length; pick = i; pickVals = vals; }
+    }
+
+    if (pick === -1) return true;                    // everything assigned
+
+    const s = sessions[pick];
+    pickVals.sort((a, b) => softPenalty(a) - softPenalty(b));
+
+    for (const v of pickVals) {
+      assignment[pick] = v;
+      add(teacherBusy, s.teacher, v.si);
+      add(roomBusy, v.room, v.si);
+      add(sectionBusy, s.section, v.si);
+
+      if (backtrack()) return true;
+
+      assignment[pick] = null;
+      del(teacherBusy, s.teacher, v.si);
+      del(roomBusy, v.room, v.si);
+      del(sectionBusy, s.section, v.si);
+    }
+    return false;
+  }
+
+  const ok = backtrack();
+  return { ok, assignment, steps };
+}
+
+/* ---------------- naive first-fit (for comparison only) ---------------- */
+function naive() {
+  const domains = buildDomains();
+  const assignment = new Array(sessions.length).fill(null);
+  const teacherBusy = {}, roomBusy = {}, sectionBusy = {};
+
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    for (const v of domains[i]) {
+      if (teacherBusy[s.teacher] && teacherBusy[s.teacher].has(v.si)) continue;
+      if (roomBusy[v.room] && roomBusy[v.room].has(v.si)) continue;
+      if (sectionBusy[s.section] && sectionBusy[s.section].has(v.si)) continue;
+      assignment[i] = v;
+      (teacherBusy[s.teacher] || (teacherBusy[s.teacher] = new Set())).add(v.si);
+      (roomBusy[v.room] || (roomBusy[v.room] = new Set())).add(v.si);
+      (sectionBusy[s.section] || (sectionBusy[s.section] = new Set())).add(v.si);
+      break;
+    }
+  }
+  return { assignment, unplaced: assignment.filter(a => !a).length };
+}
+
+function earlyCount(assignment) {
+  return assignment.filter(a => a && softPenalty(a) === 1).length;
+}
+
+/* ---------------- independent verification ----------------
+   Does NOT trust the solver. Re-checks every constraint by brute force. */
+function verify(assignment) {
+  const problems = [];
+  const placed = sessionIndices(assignment);
+
+  for (let a = 0; a < placed.length; a++) {
+    const i = placed[a];
+    const s = sessions[i];
+    const v = assignment[i];
+    const room = rooms.find(r => r.id === v.room);
+
+    if (room.type !== s.roomType)
+      problems.push(`session ${i} (${s.code}) in ${room.id}: wrong room type`);
+    if (room.capacity < s.size)
+      problems.push(`session ${i} (${s.code}) in ${room.id}: room too small`);
+    if (teacherById[s.teacher].unavail.includes(slots[v.si].day))
+      problems.push(`session ${i} (${s.code}): ${s.teacher} unavailable on ${slots[v.si].day}`);
+
+    for (let b = a + 1; b < placed.length; b++) {
+      const j = placed[b];
+      const t = sessions[j];
+      const w = assignment[j];
+      if (v.si !== w.si) continue;
+      if (s.teacher === t.teacher)
+        problems.push(`teacher ${s.teacher} double-booked: ${s.code}(${s.section}) + ${t.code}(${t.section}) at ${slotLabel(v.si)}`);
+      if (v.room === w.room)
+        problems.push(`room ${v.room} double-booked: ${s.code}(${s.section}) + ${t.code}(${t.section}) at ${slotLabel(v.si)}`);
+      if (s.section === t.section)
+        problems.push(`section ${s.section} double-booked: ${s.code} + ${t.code} at ${slotLabel(v.si)}`);
+    }
+  }
+  return problems;
+}
+
+function sessionIndices(assignment) {
+  const out = [];
+  for (let i = 0; i < assignment.length; i++) if (assignment[i]) out.push(i);
+  return out;
+}
+function slotLabel(si) { return slots[si].day + " " + slots[si].time; }
+
+/* ---------------- render ---------------- */
+function render(assignment) {
+  // group by slot index, then room
+  const cellMap = {};       // "si|room" -> [sessionIndex]
+  for (let i = 0; i < assignment.length; i++) {
+    const a = assignment[i];
+    if (!a) continue;
+    const k = a.si + "|" + a.room;
+    (cellMap[k] || (cellMap[k] = [])).push(i);
+  }
+
+  let html = "<table><tr><th>day</th><th>time</th>";
+  for (const r of rooms) html += "<th>" + r.id + " (" + r.type + ")</th>";
+  html += "</tr>";
+
+  for (let si = 0; si < slots.length; si++) {
+    html += "<tr><td>" + slots[si].day + "</td><td>" + slots[si].time + "</td>";
+    for (const r of rooms) {
+      const list = cellMap[si + "|" + r.id] || [];
+      if (!list.length) { html += '<td class="cell empty">—</td>'; continue; }
+      const multi = list.length > 1;
+      const body = list.map(i => {
+        const s = sessions[i];
+        return s.code + " " + s.section + " (" + teacherById[s.teacher].name + ")";
+      }).join("<br>");
+      html += '<td class="cell' + (multi ? " clash" : "") + '">' + body + "</td>";
+    }
+    html += "</tr>";
+  }
+  html += "</table>";
+  document.getElementById("grid").innerHTML = html;
+}
+
+/* ---------------- run ---------------- */
+document.getElementById("gen").onclick = () => {
+  const t0 = performance.now();
+  const res = solve();
+  const ms = (performance.now() - t0).toFixed(1);
+
+  const stats = document.getElementById("stats");
+
+  if (!res.ok) {
+    stats.textContent =
+      "NO SOLUTION FOUND\n" +
+      "steps: " + res.steps + "   time: " + ms + " ms\n" +
+      "The rules are not satisfiable with this dataset.";
+    document.getElementById("grid").innerHTML = "";
+    return;
+  }
+
+  const placed = sessionIndices(res.assignment).length;
+  const problems = verify(res.assignment);
+  const early = res.assignment.filter(a => a && softPenalty(a) === 1).length;
+
+  const n = naive();
+  const nClashes = verify(n.assignment).length;
+  const nEarly = earlyCount(n.assignment);
+
+  stats.textContent =
+    "sessions:        " + sessions.length + "\n" +
+    "placed:          " + placed + "\n" +
+    "verified clashes:" + (problems.length === 0 ? " 0" : "\n  " + problems.join("\n  ")) + "\n" +
+    "09:00 slots used:" + early + "\n" +
+    "solver steps:    " + res.steps + "\n" +
+    "solve time:      " + ms + " ms\n" +
+    "--- naive first-fit, same data ---\n" +
+    "placed:          " + (sessions.length - n.unplaced) + " / " + sessions.length +
+      (n.unplaced ? "   (" + n.unplaced + " unscheduled)" : "") + "\n" +
+    "verified clashes:" + (nClashes === 0 ? " 0" : " " + nClashes) + "\n" +
+    "09:00 slots used:" + nEarly;
+
+  render(res.assignment);
+};
+
+document.getElementById("reset").onclick = () => {
+  document.getElementById("stats").textContent = "not run";
+  document.getElementById("grid").innerHTML = "";
+};
+</script>
+</body>
+</html>
