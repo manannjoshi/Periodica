@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.6</title>
+<title>Periodica 1.7</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -19,9 +19,57 @@
     --accent-soft:#e6efe9;
     --danger:#9c2b25;
     --danger-soft:#fbeeec;
+    --field:#fff;
+    --field-hover:#f7f7ef;
+    --field-line:#cfd3c8;
+    --field-line-hover:#b4baac;
+    --row-hover:#fbfaf4;
+    --cell-hover:#fdfcf7;
+    --ev-ink:#20251f;
+    --ev-s:48%; --ev-l:96%;
+    --evl-s:42%; --evl-l:46%;
+    --cont-ink:#6d756b;
+    --faint:#b3b9ac;
+    --placeholder:#a8aea2;
+    --ver-line:#cfe0d6;
+    --h2btn-hover:#d7e6dd;
+    --danger-line:#f1d7d3;
+    --ring:rgba(31,92,69,.16);
     --radius:10px;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
     --shadow: 0 1px 2px rgba(23,26,24,.05), 0 10px 24px -18px rgba(23,26,24,.35);
+  }
+  html[data-theme="dark"]{
+    --paper:#121518;
+    --surface:#191d21;
+    --surface-2:#1f2429;
+    --ink:#e7ebe8;
+    --ink-2:#c2cac4;
+    --muted:#98a29b;
+    --line:#2b3138;
+    --line-soft:#232930;
+    --accent:#4fb489;
+    --accent-deep:#8fd7b2;
+    --accent-soft:#1d3329;
+    --danger:#e8837a;
+    --danger-soft:#33201e;
+    --field:#21262b;
+    --field-hover:#2a3037;
+    --field-line:#333a41;
+    --field-line-hover:#454e57;
+    --row-hover:#1f2429;
+    --cell-hover:#262c33;
+    --ev-ink:#e4e9e6;
+    --ev-s:28%; --ev-l:17%;
+    --evl-s:40%; --evl-l:58%;
+    --cont-ink:#98a29b;
+    --faint:#8d9891;
+    --placeholder:#7b857e;
+    --ver-line:#2c4a3b;
+    --h2btn-hover:#264438;
+    --danger-line:#4a2b27;
+    --ring:rgba(79,180,137,.25);
+    --shadow: 0 1px 2px rgba(0,0,0,.45), 0 12px 28px -20px rgba(0,0,0,.9);
   }
   *{ box-sizing:border-box; }
   body{
@@ -31,6 +79,12 @@
     font-size:14px; line-height:1.45;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:14px; }
+  .theme-btn{
+    height:28px; padding:0 11px; font-size:10.5px; font-weight:650; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--ink-2); background:var(--surface-2); border-color:var(--line); flex:none;
+  }
+  .theme-btn:hover{ color:var(--ink); }
   h1{
     display:flex; align-items:center; gap:9px;
     font-size:25px; font-weight:650; letter-spacing:-.025em; margin:0 0 5px;
@@ -38,7 +92,7 @@
   .ver{
     font-family:var(--mono); font-size:10.5px; font-weight:500; letter-spacing:0;
     color:var(--accent-deep); background:var(--accent-soft);
-    border:1px solid #cfe0d6; border-radius:5px; padding:2px 6px; position:relative; top:1px;
+    border:1px solid var(--ver-line); border-radius:5px; padding:2px 6px; position:relative; top:1px;
   }
   .sub{ color:var(--muted); font-size:12.5px; margin:0 0 24px; max-width:74ch; }
 
@@ -62,16 +116,16 @@
 
   input, select{
     font:inherit; font-size:12.5px; height:30px; padding:0 8px; max-width:100%;
-    color:var(--ink); background:#fff; border:1px solid #cfd3c8; border-radius:7px;
+    color:var(--ink); background:var(--field); border:1px solid var(--field-line); border-radius:7px;
     outline:none; transition:border-color .15s, box-shadow .15s, background .15s;
   }
-  input::placeholder{ color:#a8aea2; }
-  input:hover, select:hover{ border-color:#b4baac; }
-  input:focus, select:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(31,92,69,.14); }
+  input::placeholder{ color:var(--placeholder); }
+  input:hover, select:hover{ border-color:var(--field-line-hover); }
+  input:focus, select:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
   input[type=number]{ width:70px; }
   .w-code{ width:90px; } .w-sec{ width:62px; } .w-name{ width:130px; } .w-days{ width:152px; }
 
-  tbody tr:hover td{ background:#fbfaf4; }
+  tbody tr:hover td{ background:var(--row-hover); }
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th{
     font-size:10.5px; font-weight:650; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
@@ -82,27 +136,27 @@
   #teacherRows input, #roomRows input, #courseRows input,
   #teacherRows select, #roomRows select, #courseRows select{ width:100%; min-width:70px; height:28px; background:transparent; border-color:transparent; }
   #teacherRows input:hover, #roomRows input:hover, #courseRows input:hover,
-  #teacherRows select:hover, #roomRows select:hover, #courseRows select:hover{ background:#fff; border-color:#cfd3c8; }
+  #teacherRows select:hover, #roomRows select:hover, #courseRows select:hover{ background:var(--field); border-color:var(--field-line); }
   #teacherRows input:focus, #roomRows input:focus, #courseRows input:focus,
-  #teacherRows select:focus, #roomRows select:focus, #courseRows select:focus{ background:#fff; }
+  #teacherRows select:focus, #roomRows select:focus, #courseRows select:focus{ background:var(--field); }
 
   button{
     font:inherit; font-size:12.5px; font-weight:550; height:30px; padding:0 12px;
-    color:var(--ink); background:#fff; border:1px solid #cfd3c8; border-radius:7px; cursor:pointer;
+    color:var(--ink); background:var(--field); border:1px solid var(--field-line); border-radius:7px; cursor:pointer;
     transition:background .15s, border-color .15s, transform .06s, box-shadow .15s;
   }
-  button:hover{ background:#f7f7ef; border-color:#b4baac; }
+  button:hover{ background:var(--field-hover); border-color:var(--field-line-hover); }
   button:active{ transform:translateY(1px); }
-  button:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(31,92,69,.2); }
+  button:focus-visible{ outline:none; box-shadow:0 0 0 3px var(--ring); }
   #generate{ background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
   #generate:hover{ background:var(--accent-deep); border-color:var(--accent-deep); }
   h2 button{
     height:24px; padding:0 9px; font-size:10.5px; font-weight:650; letter-spacing:.02em; text-transform:none;
     background:var(--accent-soft); border-color:transparent; color:var(--accent-deep);
   }
-  h2 button:hover{ background:#d7e6dd; border-color:#cfe0d6; }
+  h2 button:hover{ background:var(--h2btn-hover); border-color:var(--ver-line); }
   .del{ padding:0 7px; color:var(--danger); background:transparent; border-color:transparent; }
-  .del:hover{ background:var(--danger-soft); border-color:#f1d7d3; }
+  .del:hover{ background:var(--danger-soft); border-color:var(--danger-line); }
 
   .actions{
     display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 16px;
@@ -113,7 +167,7 @@
 
   .msg{
     font-size:12.5px; color:var(--danger); background:var(--danger-soft);
-    border:1px solid #f1d7d3; border-left:3px solid var(--danger); border-radius:8px;
+    border:1px solid var(--danger-line); border-left:3px solid var(--danger); border-radius:8px;
     padding:10px 12px; margin:0 0 14px; white-space:pre-wrap;
   }
   .msg:empty{ display:none; }
@@ -136,11 +190,11 @@
     letter-spacing:.02em; text-transform:none; background:transparent;
     border-color:var(--line); color:var(--muted);
   }
-  #grid h3 .print-one:hover{ background:#fff; color:var(--ink); border-color:#b4baac; }
+  #grid h3 .print-one:hover{ background:var(--field); color:var(--ink); border-color:var(--field-line-hover); }
 
   #grid table{
     width:100%; border-collapse:separate; border-spacing:0; overflow:hidden;
-    background:#fff; border:1px solid var(--line); border-radius:10px;
+    background:var(--field); border:1px solid var(--line); border-radius:10px;
     margin-bottom:18px; font-size:12.5px;
   }
   #grid th{
@@ -155,22 +209,22 @@
   }
   #grid td:last-child{ border-right:0; }
   #grid tr:last-child td{ border-bottom:0; }
-  #grid tr:hover td{ background:#fff; }
-  #grid tr:hover td.cell{ background:#fdfcf7; }
+  #grid tr:hover td{ background:var(--field); }
+  #grid tr:hover td.cell{ background:var(--cell-hover); }
   td.period{
     font-family:var(--mono); font-size:10.5px; color:var(--muted);
     background:var(--surface-2); padding:6px 9px; white-space:nowrap;
   }
   .cell{ min-width:120px; }
-  .cell.empty{ color:#b3b9ac; font-size:11px; padding:6px 9px; }
+  .cell.empty{ color:var(--faint); font-size:11px; padding:6px 9px; }
 
   .ev{
-    display:block; border-left:3px solid hsl(var(--h) 42% 46%);
-    background:hsl(var(--h) 48% 96%); border-radius:0 6px 6px 0;
-    padding:5px 7px 5px 8px; font-size:11.5px; line-height:1.35; color:#20251f;
+    display:block; border-left:3px solid hsl(var(--h) var(--evl-s) var(--evl-l));
+    background:hsl(var(--h) var(--ev-s) var(--ev-l)); border-radius:0 6px 6px 0;
+    padding:5px 7px 5px 8px; font-size:11.5px; line-height:1.35; color:var(--ev-ink);
   }
   .ev + .ev{ margin-top:2px; }
-  .cont{ display:block; color:#7c8478; font-size:11.5px; padding:1px 0 0 10px; line-height:1.3; }
+  .cont{ display:block; color:var(--cont-ink); font-size:11.5px; padding:1px 0 0 10px; line-height:1.3; }
   .batch{
     display:inline-block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:.02em;
     color:#fff; padding:1px 5px; border-radius:4px; margin-right:5px; vertical-align:1px;
@@ -191,6 +245,16 @@
   }
 
   @media print{
+    html[data-theme="dark"]{
+      --ink:#171a18; --ink-2:#414a45; --muted:#666e64;
+      --surface:#fffefa; --surface-2:#faf9f3;
+      --line:#dfe0d7; --line-soft:#ecede4;
+      --field:#fff; --field-hover:#f7f7ef; --field-line:#cfd3c8; --field-line-hover:#b4baac;
+      --ev-ink:#20251f; --ev-s:48%; --ev-l:96%; --evl-s:42%; --evl-l:46%;
+      --cont-ink:#7c8478; --faint:#b3b9ac;
+      --accent:#1f5c45; --accent-deep:#143f2f; --accent-soft:#e6efe9;
+      --danger:#9c2b25; --danger-soft:#fbeeec; --danger-line:#f1d7d3;
+    }
     @page{ margin:12mm; }
     body{ max-width:none; padding:0; background:#fff; font-size:11px; }
     section, .actions, #msg, #stats, .sub, .hint{ display:none !important; }
@@ -199,6 +263,7 @@
     body.print-one #grid table.keep{ page-break-after:auto; break-after:auto; }
     h1{ font-size:16px; margin:0 0 10px; }
     .ver{ display:none; }
+    .theme-btn{ display:none !important; }
     #grid h3{ margin:14px 0 6px; font-size:12px; }
     #grid table{
       border:1px solid #9a9a9a; border-radius:0; font-size:10.5px;
@@ -212,10 +277,20 @@
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
+<script>
+  try {
+    var t = localStorage.getItem("periodica.theme");
+    if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 </head>
 <body>
 
-<h1>Periodica <span class="ver">1.6</span></h1>
+<header class="topbar">
+  <h1>Periodica <span class="ver">1.7</span></h1>
+  <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
+</header>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -321,6 +396,7 @@ const SAMPLE = {
 };
 
 const KEY = "periodica.data.v5";
+const THEME_KEY = "periodica.theme";
 const OLD_KEY = "slotzero.data.v5";
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -1057,6 +1133,19 @@ $("print").onclick = () => { clearPrintOne(); window.print(); };
 
 /* ================= run ================= */
 let lastResult = null;
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+  const b = $("theme");
+  if (b) {
+    b.textContent = t === "dark" ? "Light mode" : "Dark mode";
+    b.setAttribute("aria-pressed", String(t === "dark"));
+  }
+}
+
+$("theme").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
 
 $("generate").onclick = () => {
   $("msg").textContent = "";
