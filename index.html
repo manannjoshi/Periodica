@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Periodica 1.5</title>
+<title>Periodica 1.6</title>
 <style>
   :root{
     --paper:#f5f4ef;
@@ -215,7 +215,7 @@
 </head>
 <body>
 
-<h1>Periodica <span class="ver">1.5</span></h1>
+<h1>Periodica <span class="ver">1.6</span></h1>
 <div class="sub">50-minute periods with breaks. Classes occupy whole blocks. Changes save automatically.</div>
 
 <section>
@@ -252,7 +252,7 @@
     <thead><tr><th>course code</th><th>section</th><th>batch</th><th>teacher</th><th>blocks/week</th><th>periods/block</th><th>room type</th><th>students</th><th></th></tr></thead>
     <tbody id="courseRows"></tbody>
   </table>
-  <div class="hint" style="margin-top:6px">A block is a run of consecutive periods. Theory: 1 period per block. Lab: 2 periods per block. Leave batch blank for a whole-section class.</div>
+  <div class="hint" style="margin-top:6px">A block is a run of consecutive periods. Theory: 1 period per block. Lab: 2 periods per block. Leave batch blank for a whole-section class.<br>Blocks/week can stay blank: Periodica picks 2-4 for theory and 1 for a lab, and keeps that count every time you generate. Type a number to fix it yourself.</div>
   <div class="row" style="margin-top:8px">
     <label>copy section <select id="copyFrom"></select></label>
     <label>as <input id="copyAs" class="w-sec" placeholder="G"></label>
@@ -304,19 +304,19 @@ const SAMPLE = {
   ],
   courses: [
     // section F
-    { code: "CSL120", section: "F", batch: "",     teacher: "Aarti",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MAL151", section: "F", batch: "",     teacher: "Vipin",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "FOCP",   section: "F", batch: "",     teacher: "Richa",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "CSL110", section: "F", batch: "",     teacher: "Akanksha", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MEP110", section: "F", batch: "CS11", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
-    { code: "MEP110", section: "F", batch: "CS12", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "CSL120", section: "F", batch: "",     teacher: "Aarti",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MAL151", section: "F", batch: "",     teacher: "Vipin",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "FOCP",   section: "F", batch: "",     teacher: "Richa",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "CSL110", section: "F", batch: "",     teacher: "Akanksha", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MEP110", section: "F", batch: "CS11", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "MEP110", section: "F", batch: "CS12", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
     // section G
-    { code: "CSL120", section: "G", batch: "",     teacher: "Aarti",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MAL151", section: "G", batch: "",     teacher: "Vipin",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "FOCP",   section: "G", batch: "",     teacher: "Richa",    blocksPerWeek: 3, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "CSL110", section: "G", batch: "",     teacher: "Akanksha", blocksPerWeek: 2, blockPeriods: 1, roomType: "class", size: 40 },
-    { code: "MEP110", section: "G", batch: "CS11", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 },
-    { code: "MEP110", section: "G", batch: "CS12", teacher: "Arohi",    blocksPerWeek: 1, blockPeriods: 2, roomType: "lab",   size: 15 }
+    { code: "CSL120", section: "G", batch: "",     teacher: "Aarti",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MAL151", section: "G", batch: "",     teacher: "Vipin",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "FOCP",   section: "G", batch: "",     teacher: "Richa",    blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "CSL110", section: "G", batch: "",     teacher: "Akanksha", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 },
+    { code: "MEP110", section: "G", batch: "CS11", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 },
+    { code: "MEP110", section: "G", batch: "CS12", teacher: "Arohi",    blocksPerWeek: "", blockPeriods: 2, roomType: "lab",   size: 15 }
   ]
 };
 
@@ -465,25 +465,15 @@ document.addEventListener("input", e => {
 
   if (f === "unavail") {
     state[tbl][i].unavail = t.value.split(",").map(s => s.trim()).filter(Boolean);
-  } else if (["blocksPerWeek", "blockPeriods", "capacity", "size"].includes(f)) {
+  } else if (f === "blocksPerWeek") {
+    state[tbl][i][f] = t.value === "" ? "" : Math.max(0, Math.floor(Number(t.value) || 0));
+  } else if (["blockPeriods", "capacity", "size"].includes(f)) {
     state[tbl][i][f] = Number(t.value) || 0;
   } else {
     state[tbl][i][f] = t.value;
     if (tbl === "teachers" && f === "name") renderCourses();
   }
   save();
-});
-
-document.addEventListener("change", e => {
-  const t = e.target;
-  if (t.dataset.tbl) {
-    const tbl = t.dataset.tbl, i = +t.dataset.i, f = t.dataset.f;
-    if (state[tbl] && state[tbl][i]) {
-      state[tbl][i][f] = t.value;
-      save();
-      if (tbl === "teachers" && f === "name") renderCourses();
-    }
-  }
 });
 
 document.addEventListener("click", e => {
@@ -520,7 +510,7 @@ $("doCopy").onclick = () => {
 };
 
 $("addCourse").onclick = () => {
-  state.courses.push({ code: "", section: "", batch: "", teacher: teacherNames()[0] || "", blocksPerWeek: 1, blockPeriods: 1, roomType: "class", size: 40 });
+  state.courses.push({ code: "", section: "", batch: "", teacher: teacherNames()[0] || "", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 });
   save();
   renderCourses();
 };
@@ -548,6 +538,19 @@ $("clear").onclick = () => {
 };
 
 /* ================= model ================= */
+function autoBlocks(c) {
+  const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
+  if (c.roomType === "lab" || span > 1) return 1;
+  let h = 0;
+  const key = c.code || "";
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 997;
+  const wanted = 2 + (h % 3);
+  const rooms = state.rooms.filter(r => r.name && r.type === c.roomType).length;
+  const sections = new Set(state.courses.filter(x => x.code === c.code && x.section).map(x => x.section)).size || 1;
+  const cap = Math.max(1, Math.floor(rooms * state.days.length / sections));
+  return Math.min(wanted, cap);
+}
+
 function buildModel() {
   const periods = periodTemplate();
   const per = periods.length;
@@ -570,7 +573,8 @@ function buildModel() {
 
   const sessions = [];
   for (const c of state.courses) {
-    const n = Math.max(0, Math.floor(Number(c.blocksPerWeek) || 0));
+    const raw = c.blocksPerWeek;
+    const n = (raw === "" || raw == null) ? autoBlocks(c) : Math.max(0, Math.floor(Number(raw) || 0));
     const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
     for (let k = 0; k < n; k++) {
       sessions.push({
@@ -616,7 +620,7 @@ function diagnose(model) {
     if (!c.code) out.push("A class row has no course code.");
     if (!c.section) out.push(`${c.code || "(no code)"}: no section.`);
     if (c.teacher && !teacherByName[c.teacher]) out.push(`${c.code || "(no code)"}: teacher "${c.teacher}" is not in the teachers table.`);
-    if (Number(c.blocksPerWeek) <= 0) out.push(`${c.code || "(no code)"} ${c.section}: blocks/week must be at least 1.`);
+    if (c.blocksPerWeek !== "" && Number(c.blocksPerWeek) <= 0) out.push(`${c.code || "(no code)"} ${c.section}: blocks/week must be at least 1.`);
     if (Number(c.blockPeriods) < 1) out.push(`${c.code || "(no code)"} ${c.section}: a block needs at least 1 period.`);
     if (per && Number(c.blockPeriods) > per) out.push(`${c.code || "(no code)"} ${c.section}: block of ${c.blockPeriods} periods does not fit in a day of ${per}.`);
     const key = (c.code || "") + "|" + (c.section || "") + "|" + (c.batch || "");
@@ -725,7 +729,7 @@ function solve(model) {
         if (!a) continue;
         const t = sessions[i];
         if (slots[a.si].day !== day) continue;
-        if (t.code === s.code && t.section === s.section) p += 6;   // same subject twice in one day
+        if (t.code === s.code && t.section === s.section) p += 40;  // same subject twice in one day
         if (t.section === s.section) p += 2 * t.span;                 // keep the section's days even
         if (t.teacher === s.teacher) p += 3 * t.span;                 // and the teacher's
       }
