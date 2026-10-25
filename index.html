@@ -487,8 +487,20 @@
       <section>
         <h2 class="collapsible" data-target="otherSec">Other commitments <small>block teachers for other programs</small> <span class="collapser">−</span></h2>
         <div id="otherSec" class="collapsible-content">
-        <textarea id="otherBlocks" rows="6" spellcheck="false" placeholder="Vipin Yadav | Mon | 09:00-11:00&#10;Aarti Yadav | Tue | 2-3"></textarea>
-        <div class="hint help">One per line: <code>Teacher Name | Day | HH:MM-HH:MM or period numbers (e.g. 2-3)</code>. Blocks teacher time for MBA/BA/MTech/ECE etc.</div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
+            <label>Teacher <select id="obTeacher"></select></label>
+            <label>Day <select id="obDay"></select></label>
+            <label>From <select id="obFrom"></select></label>
+            <label>To <select id="obTo"></select></label>
+            <button id="obAdd" type="button">Add block</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Teacher</th><th>Day</th><th>Periods</th><th></th></tr></thead>
+              <tbody id="obRows"></tbody>
+            </table>
+          </div>
+          <div class="hint">Blocks teacher time for MBA/BA/MTech/ECE etc. Periods are based on your Week structure.</div>
         </div>
       </section>
 
@@ -603,14 +615,102 @@ function load() {
     const s = JSON.parse(store.get(KEY));
     if (s && Array.isArray(s.courses) && Array.isArray(s.days) && typeof s.teachers === "string" && typeof s.rooms === "string") {
       if (typeof s.otherBlocks !== "string") s.otherBlocks = "";
+      if (!Array.isArray(s.otherBlocksArr)) s.otherBlocksArr = [];
       return s;
     }
   } catch (e) { /* fall through */ }
   const sd = sampleData();
   sd.otherBlocks = "";
+  sd.otherBlocksArr = [];
   return sd;
 }
 function save() { store.set(KEY, JSON.stringify(state)); }
+
+function syncOtherBlocksArr() {
+  if (!Array.isArray(state.otherBlocksArr)) state.otherBlocksArr = [];
+  // try to parse legacy
+  if (state.otherBlocks && typeof state.otherBlocks === "string" && state.otherBlocks.trim()) {
+    const tlist = (state.teachers||"").split("\n").map(x=>x.trim()).filter(Boolean);
+    for (const line of state.otherBlocks.split("\n")) {
+      const l = line.trim();
+      if (!l) continue;
+      const parts = l.split("|").map(x=>x.trim());
+      if (parts.length < 3) continue;
+      const teacher = parts[0];
+      if (tlist.length && !tlist.includes(teacher)) continue;
+      const day = parts[1];
+      let m;
+      if ((m = parts[2].match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/))) {
+        // can't map time to periods easily; skip legacy for now
+        continue;
+      }
+      if ((m = parts[2].match(/(\d+)\s*-\s*(\d+)/))) {
+        const from = +m[1], to = +m[2];
+        state.otherBlocksArr.push({teacher, day, from, to});
+      }
+    }
+    state.otherBlocks = "";
+  }
+}
+
+function renderOtherBlocks() {
+  syncOtherBlocksArr();
+  const tlist = (state.teachers||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  const days = Array.isArray(state.days)?state.days:[];
+  const periods = Math.max(1, Number(state.periods)||8);
+  const obT = document.getElementById("obTeacher");
+  const obD = document.getElementById("obDay");
+  const obF = document.getElementById("obFrom");
+  const obTo = document.getElementById("obTo");
+  if (obT) {
+    obT.innerHTML = "";
+    tlist.forEach(t => { const o=document.createElement("option"); o.value=t; o.textContent=t; obT.appendChild(o); });
+  }
+  if (obD) {
+    obD.innerHTML = "";
+    days.forEach(d => { const o=document.createElement("option"); o.value=d; o.textContent=d; obD.appendChild(o); });
+  }
+  if (obF) {
+    obF.innerHTML = "";
+    for (let i=1;i<=periods;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i; obF.appendChild(o); }
+    if (obF.options.length) obF.value = "1";
+  }
+  if (obTo) {
+    obTo.innerHTML = "";
+    for (let i=1;i<=periods;i++){ const o=document.createElement("option"); o.value=i; o.textContent=i; obTo.appendChild(o); }
+    if (obTo.options.length) obTo.value = periods;
+  }
+  const tb = document.getElementById("obRows");
+  if (tb) {
+    tb.innerHTML = "";
+    state.otherBlocksArr.forEach((b, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${esc(b.teacher)}</td><td>${esc(b.day)}</td><td>${b.from}-${b.to}</td><td><button type="button" class="ghost" data-idx="${idx}">Remove</button></td>`;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => {
+        const i = +btn.dataset.idx;
+        state.otherBlocksArr.splice(i,1);
+        save();
+        renderOtherBlocks();
+      };
+    });
+  }
+}
+
+document.getElementById("obAdd")?.addEventListener("click", () => {
+  syncOtherBlocksArr();
+  const t = document.getElementById("obTeacher")?.value;
+  const d = document.getElementById("obDay")?.value;
+  const f = +document.getElementById("obFrom")?.value || 1;
+  const to = +document.getElementById("obTo")?.value || f;
+  if (!t || !d) { alert("Add teachers and days first"); return; }
+  if (f > to) { alert("From must be <= To"); return; }
+  state.otherBlocksArr.push({teacher:t, day:d, from:f, to:to});
+  save();
+  renderOtherBlocks();
+});
 
 /* ================= helpers ================= */
 const $ = id => document.getElementById(id);
@@ -848,7 +948,7 @@ $("batchSplit")?.addEventListener("click", () => {
   renderCourses();
 });
 
-$("teachers").addEventListener("input", e => { state.teachers = e.target.value; save(); renderPeople(); renderCourses(); });
+$("teachers").addEventListener("input", e => { state.teachers = e.target.value; save(); renderPeople(); renderCourses(); renderOtherBlocks(); });
 $("rooms").addEventListener("input", e => { state.rooms = e.target.value; save(); renderPeople(); renderLoad(); });
 if ($("otherBlocks")) $("otherBlocks").addEventListener("input", e => { state.otherBlocks = e.target.value; save(); });
 
@@ -864,7 +964,7 @@ for (const [id, read] of Object.entries(weekFields)) {
     state[id] = read(e.target.value);
     save();
     renderSlotPreview();
-    if (id === "days") { renderPeople(); renderLoad(); } // blocked days are checked against the day list
+    if (id === "days") { renderPeople(); renderLoad(); renderOtherBlocks(); } // blocked days are checked against the day list
   });
 }
 
