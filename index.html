@@ -1012,6 +1012,8 @@ $("doCopy").onclick = () => {
 
 function resetData(next) {
   state = next;
+  if (!state.otherBlocksArr) state.otherBlocksArr = [];
+  if (!Array.isArray(state.days)) state.days = [];
   save();
   renderAll();
   showResult(null);
@@ -1019,7 +1021,7 @@ function resetData(next) {
 }
 $("sample").onclick = () => { if (confirm("Replace the current setup with the sample data?")) resetData(sampleData()); };
 $("clear").onclick = () => {
-  if (confirm("Clear all teachers, rooms and classes?")) resetData({ ...WEEK, teachers: "", rooms: "", courses: [] });
+  if (confirm("Clear all teachers, rooms and classes?")) resetData({ ...WEEK, teachers: "", rooms: "", courses: [], otherBlocksArr: [] });
 };
 
 /* ================= model ================= */
@@ -1654,17 +1656,26 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       var start = 0;
       var hdr = lines[0].toLowerCase();
       if (hdr.indexOf("course")>=0 || hdr.indexOf("code")>=0 || hdr.indexOf("section")>=0) start = 1;
+      var teachers = new Set((state.teachers||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
+      var rooms = new Set((state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
       var count = 0;
       for (var i=start; i<lines.length; i++){
         var line = lines[i];
         var parts = line.split(",").map(function(x){return x.trim().replace(/^"|"$/g,"");});
         if (parts.length < 2) continue;
-        var code = parts[0]||"", section = parts[1]||"", batch = parts[2]||"", teacher = parts[3]||"", meetings = parts[4]===undefined?"":parts[4], periods = parts[5]===undefined?"1":parts[5];
+        var code = parts[0]||"", section = parts[1]||"", batch = parts[2]||"", teacher = parts[3]||"", meetings = parts[4]===undefined?"":parts[4], periods = parts[5]===undefined?"1":parts[5], room = parts[6]||"";
         if (!code && !section) continue;
         state.courses.push({code:code, section:section, batch:batch, teacher:teacher, blocksPerWeek: meetings===""?"":meetings, blockPeriods: periods||"1", roomType:"class", size:0});
+        if (teacher) teachers.add(teacher);
+        if (room) rooms.add(room);
         count++;
       }
-      save(); renderCourses();
+      state.teachers = Array.from(teachers).join("\n");
+      state.rooms = Array.from(rooms).join("\n");
+      save();
+      if (typeof renderPeople === "function") renderPeople();
+      if (typeof renderCourses === "function") renderCourses();
+      if (typeof renderOtherBlocks === "function") renderOtherBlocks();
       alert("Imported " + count + " rows");
     } catch(ex){ alert("Failed to import CSV"); }
     e.target.value = "";
