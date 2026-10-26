@@ -1246,9 +1246,52 @@ $("reschedule").onclick = () => {
   if (rescheduleMode) exitRescheduleMode(); else enterRescheduleMode();
 };
 
-document.getElementById("analyseAi")?.addEventListener("click", async () => {
+const SYSTEM_PROMPT = "You are an academic scheduling expert analyzing a generated timetable. CRITICAL RULES: 1. Course hours and teacher assignments are FIXED academic requirements decided by department syllabus and cannot be changed. Do NOT tell administrators to cut or add course sessions, change curriculum credits, or swap assigned teachers. 2. Focus on schedule execution quality: conflict-free verification, even distribution across days, and daily pace. 3. If clashCount is 0, clearly confirm the timetable is fully conflict-free and valid for publication. 4. Give 1 or 2 practical operational observations for managing the schedule smoothly (such as room turnarounds or peak day monitoring). Format: Short practical analysis. Max 200 words. Plain text only, no markdown, no asterisks, no bold, no underscores.";
+
+async function runGroqDirect(apiKey, summary) {
+  const userMsg = "Summary:\n" + JSON.stringify(summary);
+  const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + apiKey.trim()
+    },
+    body: JSON.stringify({
+      model: "openai/gpt-oss-20b",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMsg }
+      ],
+      temperature: 0.3,
+      max_completion_tokens: 4096
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    if (resp.status === 401) {
+      localStorage.removeItem("periodica.groq_key");
+      throw new Error("Invalid Groq API Key. The saved key was cleared; please click Analyse with AI to enter a valid key.");
+    }
+    throw new Error(err.error?.message || `Groq API error (${resp.status})`);
+  }
+  const data = await resp.json();
+  const msg = data.choices?.[0]?.message || {};
+  return msg.content || msg.reasoning || "No analysis generated.";
+}
+
+document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
   try {
     if (!lastResult) { alert("Generate timetable first"); return; }
+    
+    // Holding Shift while clicking lets user change their saved key on static sites
+    if (e.shiftKey && localStorage.getItem("periodica.groq_key")) {
+      if (confirm("Reset your saved Groq API key?")) {
+        localStorage.removeItem("periodica.groq_key");
+        alert("Saved key cleared.");
+        return;
+      }
+    }
+
     const model = lastResult.model, assignment = lastResult.assignment;
     const teacherLoad = {};
     const courseLoad = {};
@@ -1288,33 +1331,56 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
     };
     const btn = document.getElementById("analyseAi");
     if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
-    
-    // Auto-detect endpoint: if opened via VS Code Live Server (e.g. port 5500), connect to port 3000
-    const isLocalOtherPort = (location.hostname === "localhost" || location.hostname === "127.0.0.1") && location.port && location.port !== "3000";
-    const endpoint = isLocalOtherPort ? "http://localhost:3000/api/analyse" : "/api/analyse";
 
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ summary })
-    });
+    let content = "";
+    const isGitHubPages = location.hostname.endsWith("github.io");
 
-    const contentType = resp.headers.get("content-type") || "";
-    let data;
-    if (contentType.includes("application/json")) {
-      data = await resp.json();
-    } else {
-      const errorText = await resp.text();
-      if (resp.status === 404) {
-        throw new Error("Backend route '/api/analyse' not found (404). Please ensure you are running the backend server with 'npm start' on http://localhost:3000.");
+    if (isGitHubPages) {
+      // GitHub Pages is purely static and cannot execute serverless/Node code
+      let key = localStorage.getItem("periodica.groq_key");
+      if (!key) {
+        key = prompt("GitHub Pages is a static host without a backend server.\n\nTo use AI Analysis on GitHub Pages, enter your Groq API key:\n(Saved only in your browser's private localStorage)");
+        if (!key || !key.trim()) return;
+        localStorage.setItem("periodica.groq_key", key.trim());
       }
-      throw new Error(`Server returned error ${resp.status}: ${errorText.slice(0, 150)}`);
+      content = await runGroqDirect(key, summary);
+    } else {
+      // Standard backend proxy (Vercel / Render / localhost server)
+      const isLocalOtherPort = (location.hostname === "localhost" || location.hostname === "127.0.0.1") && location.port && location.port !== "3000";
+      const endpoint = isLocalOtherPort ? "http://localhost:3000/api/analyse" : "/api/analyse";
+
+      let resp;
+      try {
+        resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ summary })
+        });
+      } catch (err) {
+        throw new Error("Cannot connect to server. Run 'npm start' in terminal to start the backend at http://localhost:3000.");
+      }
+
+      if (resp.status === 405 || resp.status === 404) {
+        // Fallback for any other static hosting
+        let key = localStorage.getItem("periodica.groq_key");
+        if (!key) {
+          key = prompt("This site is running on a static server without a backend.\n\nEnter your Groq API key to run analysis directly:\n(Saved in your browser only)");
+          if (!key || !key.trim()) return;
+          localStorage.setItem("periodica.groq_key", key.trim());
+        }
+        content = await runGroqDirect(key, summary);
+      } else {
+        const contentType = resp.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          const errorText = await resp.text();
+          throw new Error(`Server returned error ${resp.status}: ${errorText.slice(0, 150)}`);
+        }
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || "Analysis request failed");
+        content = data.content || "No analysis generated.";
+      }
     }
 
-    if (!resp.ok) {
-      throw new Error(data.error || "Analysis request failed");
-    }
-    const content = data.content || "No analysis generated.";
     let box = document.getElementById("aiAnalysisBox");
     if (!box) {
       box = document.createElement("section");
@@ -1327,9 +1393,6 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
     box.style.display = "block";
   } catch(e) {
     let msg = e.message || "Unknown error";
-    if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-      msg = "Cannot connect to the server.\n\nPlease start the server in your terminal:\n  npm start\n\nThen keep the terminal open and visit:\n  http://localhost:3000";
-    }
     alert("Analysis Failed:\n\n" + msg);
   } finally {
     const btn = document.getElementById("analyseAi");
