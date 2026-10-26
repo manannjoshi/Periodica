@@ -1817,7 +1817,8 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
       body: JSON.stringify({model: "llama-3.1-8b-instant", messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4})
     });
     const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content || "No response";
+    console.log(data);
+    const content = data.choices?.[0]?.message?.content || data.error?.message || "No response";
     let box = document.getElementById("aiAnalysisBox");
     if (!box) {
       box = document.createElement("section");
