@@ -533,8 +533,20 @@
     <h2 style="margin:0 0 10px; font-size:15px;">Timetable Advisor</h2>
     <div id="advisorList" class="stack" style="display:grid; gap:8px;"></div>
   </section>
-  <div id="grid"></div>
   <section id="aiReviewSec" style="margin-top:18px; display:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+      <h2 style="margin:0; font-size:15px;">AI Review</h2>
+      <select id="aiProv">
+        <option value="groq" selected>Groq</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <input id="aiM" placeholder="Model (llama-3.1-8b-instant / gemini-2.5-flash)" style="flex:1; min-width:260px; max-width:340px">
+      <input id="aiK" type="password" placeholder="API key (saved)" style="flex:1; min-width:200px; max-width:260px">
+      <button id="aiRevBtn" type="button">Review timetable</button>
+    </div>
+    <div id="aiRevOut" class="stack" style="display:grid; gap:10px;"></div>
+  </section>
+
     <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
       <h2 style="margin:0; font-size:15px;">AI Review</h2>
       <select id="aiProv">
@@ -1816,8 +1828,8 @@ try {
     const k = localStorage.getItem("periodica_ai_key_" + prov);
     if (kEl) kEl.value = k || "";
     if (mEl) {
-      if (prov === "groq" && !mEl.value) mEl.value = "llama-3.1-8b-instant";
-      if (prov === "gemini" && !mEl.value) mEl.value = "gemini-2.5-flash";
+      if (prov === "groq") mEl.value = "llama-3.1-8b-instant";
+      if (prov === "gemini") mEl.value = "gemini-2.5-flash";
     }
   });
   kEl?.addEventListener("input", (e) => {
