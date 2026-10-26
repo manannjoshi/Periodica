@@ -1955,6 +1955,10 @@ document.addEventListener("click", e => {
     content.classList.add("collapsed");
     if (collapser) collapser.textContent = "+";
   }
+  if (target === "classesSec") {
+    const addBtn = document.getElementById("addCourse");
+    if (addBtn) addBtn.style.display = content.classList.contains("collapsed") ? "none" : "inline-flex";
+  }
 });
 
 /* ================= boot ================= */
@@ -1965,6 +1969,9 @@ setupEl.addEventListener("toggle", () => store.set(SETUP_KEY, setupEl.open ? "1"
 
 if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
 
+if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
+if (document.getElementById('classesSec')) { document.getElementById('classesSec').classList.remove('collapsed'); }
+var addBtnInit=document.getElementById('addCourse'); if(addBtnInit) addBtnInit.style.display='inline-flex';
 renderAll();
 showResult(null);
 </script>
