@@ -2,11 +2,10 @@
   "name": "periodica",
   "version": "1.15.0",
   "description": "Periodica Timetable Generator & Scheduling Workbench",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
-    "build": "echo 'Build ready'"
+    "start": "node local-server.js",
+    "dev": "node local-server.js",
+    "build": "echo 'Static build ready'"
   },
   "keywords": [
     "timetable",

@@ -15,6 +15,13 @@ function getClientIp(req) {
 
 function checkRateLimit(ip) {
   const now = Date.now();
+  // Inline cleanup of old entries without needing setInterval
+  if (rateLimitMap.size > 500) {
+    for (const [k, v] of rateLimitMap.entries()) {
+      if (now > v.resetTime) rateLimitMap.delete(k);
+    }
+  }
+
   const entry = rateLimitMap.get(ip);
   if (!entry) {
     rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
@@ -33,21 +40,9 @@ function checkRateLimit(ip) {
   return { limited: false, remaining: MAX_REQUESTS_PER_WINDOW - entry.count };
 }
 
-// Clean up stale rate-limit entries every 5 minutes
-if (typeof setInterval !== "undefined") {
-  const cleanup = setInterval(() => {
-    const now = Date.now();
-    for (const [ip, entry] of rateLimitMap.entries()) {
-      if (now > entry.resetTime) rateLimitMap.delete(ip);
-    }
-  }, 5 * 60 * 1000);
-  if (cleanup.unref) cleanup.unref();
-}
-
 // Input Sanitization to prevent prompt injection and DoS
 function sanitizeString(str, maxLen = 50) {
   if (typeof str !== "string") return "";
-  // Strip control characters, backticks, angle brackets, and enforce max length
   return str.replace(/[\x00-\x1F\x7F<>`\\]/g, "").trim().slice(0, maxLen);
 }
 
@@ -109,10 +104,22 @@ function validateAndSanitizeSummary(raw) {
 
 const SYSTEM_PROMPT = "You are an academic scheduling expert analyzing a generated timetable. CRITICAL RULES: 1. Course hours and teacher assignments are FIXED academic requirements decided by department syllabus and cannot be changed. Do NOT tell administrators to cut or add course sessions, change curriculum credits, or swap assigned teachers. 2. Focus on schedule execution quality: conflict-free verification, even distribution across days, and daily pace. 3. If clashCount is 0, clearly confirm the timetable is fully conflict-free and valid for publication. 4. Give 1 or 2 practical operational observations for managing the schedule smoothly (such as room turnarounds or peak day monitoring). Format: Short practical analysis. Max 200 words. Plain text only, no markdown, no asterisks, no bold, no underscores.";
 
+function sendJson(res, statusCode, data) {
+  res.statusCode = statusCode;
+  if (typeof res.status === "function") {
+    res.status(statusCode);
+  }
+  if (typeof res.json === "function") {
+    return res.json(data);
+  }
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  return res.end(JSON.stringify(data));
+}
+
 module.exports = async function handler(req, res) {
   // CORS Headers
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -120,27 +127,34 @@ module.exports = async function handler(req, res) {
     return res.end();
   }
 
+  // Health check endpoint for testing in browser or monitoring
+  if (req.method === "GET") {
+    return sendJson(res, 200, {
+      status: "ok",
+      service: "Periodica AI Analysis API",
+      groqConfigured: !!process.env.GROQ_API_KEY
+    });
+  }
+
   if (req.method !== "POST") {
-    res.statusCode = 405;
-    const msg = { error: "Method not allowed. Use POST." };
-    return res.json ? res.json(msg) : res.end(JSON.stringify(msg));
+    return sendJson(res, 405, { error: "Method not allowed. Use POST." });
   }
 
   // Rate Limiting Check
   const clientIp = getClientIp(req);
   const rateStatus = checkRateLimit(clientIp);
   if (rateStatus.limited) {
-    res.statusCode = 429;
     res.setHeader("Retry-After", String(rateStatus.retryAfter || 60));
-    const msg = { error: `Too many requests. Rate limit is ${MAX_REQUESTS_PER_WINDOW} per minute. Please try again in ${rateStatus.retryAfter} seconds.` };
-    return res.json ? res.json(msg) : res.end(JSON.stringify(msg));
+    return sendJson(res, 429, {
+      error: `Too many requests. Rate limit is ${MAX_REQUESTS_PER_WINDOW} per minute. Please try again in ${rateStatus.retryAfter} seconds.`
+    });
   }
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    res.statusCode = 500;
-    const msg = { error: "GROQ_API_KEY is not configured on the server. Please check your .env or deployment settings." };
-    return res.json ? res.json(msg) : res.end(JSON.stringify(msg));
+    return sendJson(res, 500, {
+      error: "GROQ_API_KEY is not configured on Vercel. Please go to Vercel Project Settings > Environment Variables, add GROQ_API_KEY, and redeploy."
+    });
   }
 
   try {
@@ -170,19 +184,17 @@ module.exports = async function handler(req, res) {
 
     const data = await groqResponse.json();
     if (!groqResponse.ok) {
-      res.statusCode = groqResponse.status;
       const errorMsg = data.error?.message || "Error calling Groq API";
-      return res.json ? res.json({ error: errorMsg }) : res.end(JSON.stringify({ error: errorMsg }));
+      return sendJson(res, groqResponse.status, { error: errorMsg });
     }
 
     const msg = data.choices?.[0]?.message || {};
     const content = msg.content || msg.reasoning || "No analysis generated.";
     
-    res.statusCode = 200;
-    return res.json ? res.json({ content }) : res.end(JSON.stringify({ content }));
+    return sendJson(res, 200, { content });
   } catch (err) {
-    res.statusCode = err.message && err.message.startsWith("Invalid payload") ? 400 : 500;
+    const status = err.message && err.message.startsWith("Invalid payload") ? 400 : 500;
     const errorMsg = err.message || "Internal server error";
-    return res.json ? res.json({ error: errorMsg }) : res.end(JSON.stringify({ error: errorMsg }));
+    return sendJson(res, status, { error: errorMsg });
   }
 };
