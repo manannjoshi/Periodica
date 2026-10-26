@@ -1691,11 +1691,17 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       state.teachers = Array.from(teachers).filter(Boolean).join("\n");
       state.rooms = Array.from(rooms).filter(Boolean).join("\n");
       save();
+      console.log("IMPORTED teachers:", state.teachers);
+      console.log("IMPORTED rooms:", state.rooms);
       var teachersEl = document.getElementById("teachers");
-      if (teachersEl) teachersEl.value = state.teachers;
+      if (teachersEl) { teachersEl.value = state.teachers; }
       var roomsEl = document.getElementById("rooms");
-      if (roomsEl) roomsEl.value = state.rooms;
+      if (roomsEl) { roomsEl.value = state.rooms; }
       if (typeof renderPeople === "function") renderPeople();
+      if (typeof renderStatus === "function") {
+        try { renderStatus("teachersStatus", parseTeachers(state.teachers), "teacher"); } catch(e){}
+        try { renderStatus("roomsStatus", parseRooms(state.rooms), "room"); } catch(e){}
+      }
       if (typeof renderCourses === "function") renderCourses();
       if (typeof renderOtherBlocks === "function") renderOtherBlocks();
       alert("Imported " + count + " rows");
