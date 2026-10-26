@@ -289,10 +289,8 @@
   /* ---------- timetable ---------- */
   #grid{ margin:0; }
   #grid:empty::before{
-    content:"No timetable yet. Press Generate to build one.";
-    display:block; padding:64px 24px; text-align:center;
-    color:var(--muted); font-size:13px;
-    background:var(--surface); border:1px dashed var(--line); border-radius:var(--radius);
+    content:"";
+    display:none;
   }
   #grid h3{
     display:flex; align-items:center; gap:9px; flex-wrap:wrap;
