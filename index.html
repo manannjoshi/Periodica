@@ -512,6 +512,7 @@
       <div class="data-actions">
         <button id="generate" type="button">Generate</button>
         <button id="reschedule" class="ghost" type="button" hidden>Reschedule</button>
+        <button id="analyseAi" class="ghost" type="button" hidden>Analyse with AI</button>
         <label class="field-inline" for="view"><span>View</span>
           <select id="view">
             <option value="section" selected>by section</option>
@@ -1574,6 +1575,8 @@ function showResult(result, statsHtml) {
   $("reschedule").classList.remove("on");
   $("reschedule").textContent = "Reschedule";
   $("reschedule").hidden = !result;   // only make sense with a timetable on screen
+  const aiBtn = document.getElementById("analyseAi");
+  if (aiBtn) aiBtn.hidden = !result;
   if (result) {
     renderStats(result);
     renderGrid(result.model, result.assignment);
@@ -1785,6 +1788,53 @@ $("reschedule").onclick = () => {
   if (!lastResult) return;
   if (rescheduleMode) exitRescheduleMode(); else enterRescheduleMode();
 };
+
+document.getElementById("analyseAi")?.addEventListener("click", async () => {
+  try {
+    if (!window._lastResult) { alert("Generate timetable first"); return; }
+    const apiKey = "REDACTED";
+    const res = window._lastResult;
+    const timetable = [];
+    for (let di=0; di<res.days.length; di++) {
+      const d = res.days[di];
+      for (let pi=0; pi<res.perDay; pi++) {
+        const key2 = di+":"+pi;
+        const cell = res.grid[key2];
+        if (!cell || !cell.length) continue;
+        for (let j=0; j<cell.length; j++) {
+          const it = cell[j];
+          timetable.push({day:d, period:pi+1, section:it.section||"", batch:it.batch||"", code:it.code||"", teacher:it.teacher||"", room:it.room||""});
+        }
+      }
+    }
+    const system = "You are an expert college timetable analyst. Give a detailed but practical analysis of this timetable. Point out teacher workload issues, gaps, room usage, conflicts of interest, and concrete suggestions to improve it. Be honest and specific.";
+    const userMsg = "Analyse this timetable:\n" + JSON.stringify({timetable});
+    const btn = document.getElementById("analyseAi");
+    if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
+    const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + apiKey},
+      body: JSON.stringify({model: "llama-3.1-8b-instant", messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4})
+    });
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || "No response";
+    let box = document.getElementById("aiAnalysisBox");
+    if (!box) {
+      box = document.createElement("section");
+      box.id = "aiAnalysisBox";
+      box.style.cssText = "margin-top:18px;";
+      box.innerHTML = "<h2 style='margin:0 0 10px; font-size:15px;'>AI Analysis</h2><div id='aiAnalysisOut' style='white-space:pre-wrap; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); line-height:1.6;'></div>";
+      document.getElementById("grid").parentNode.insertBefore(box, document.getElementById("grid").nextSibling);
+    }
+    document.getElementById("aiAnalysisOut").textContent = content;
+    box.style.display = "block";
+  } catch(e) {
+    alert("Analysis failed");
+  } finally {
+    const btn = document.getElementById("analyseAi");
+    if (btn) { btn.disabled = false; btn.textContent = "Analyse with AI"; }
+  }
+});
 
 /* every (start, room) the class could move to, given everything else stays put */
 function getValidMoves(model, assignment, idx) {
