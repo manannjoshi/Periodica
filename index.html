@@ -481,6 +481,11 @@
           <label>copy section <select id="copyFrom"></select></label>
           <label>as <input id="copyAs" class="w-sec" placeholder="G"></label>
           <button id="doCopy" type="button">copy its classes</button>
+          <span style="color:var(--muted);">|</span>
+          <button id="csvImport" type="button" class="ghost">Import CSV</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
+          <button id="csvExport" type="button" class="ghost">Export classes CSV</button>
+          <button id="ttExport" type="button" class="ghost">Export timetable CSV</button>
         </div>
       </section>
 
@@ -655,7 +660,10 @@ function syncOtherBlocksArr() {
 
 function renderOtherBlocks() {
   syncOtherBlocksArr();
-  const tlist = (state.teachers||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  let tlist = (state.teachers||"").split("\n").map(x=>x.trim()).filter(Boolean);
+  if ((!tlist || tlist.length === 0) && typeof parseTeachers === "function") {
+    try { tlist = parseTeachers(state.teachers).items.map(x=>x.name); } catch(e){}
+  }
   const days = Array.isArray(state.days)?state.days:[];
   const periods = Math.max(1, Number(state.periods)||8);
   const obT = document.getElementById("obTeacher");
@@ -664,7 +672,11 @@ function renderOtherBlocks() {
   const obTo = document.getElementById("obTo");
   if (obT) {
     obT.innerHTML = "";
-    tlist.forEach(t => { const o=document.createElement("option"); o.value=t; o.textContent=t; obT.appendChild(o); });
+    if (!tlist.length) {
+      const o=document.createElement("option"); o.value=""; o.textContent="No teachers"; obT.appendChild(o);
+    } else {
+      tlist.forEach(t => { const o=document.createElement("option"); o.value=t; o.textContent=t; obT.appendChild(o); });
+    }
   }
   if (obD) {
     obD.innerHTML = "";
@@ -1575,6 +1587,20 @@ function generate() {
 
   generation++;   // the next press uses the next seed, so it gives a different arrangement
   setMsg("");
+  lastResult = { model, assignment: res.assignment, info: { backtracks: res.backtracks, ms } };
+  try {
+    const days = model.days, perDay = model.perDay;
+    const grid = {};
+    model.sessions.forEach((ses, si) => {
+      const slot = res.assignment[si];
+      if (slot < 0) return;
+      const di = Math.floor(slot / perDay), pi = slot % perDay;
+      const key = di + ":" + pi;
+      if (!grid[key]) grid[key] = [];
+      grid[key].push({section: ses.section, batch: ses.batch, code: ses.code, teacher: ses.teacher, room: ses.room});
+    });
+    window._lastResult = { days, perDay, grid };
+  } catch(e) {}
   showResult({ model, assignment: res.assignment, info: { backtracks: res.backtracks, ms } });
 }
 $("generate").onclick = generate;
