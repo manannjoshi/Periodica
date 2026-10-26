@@ -1509,7 +1509,7 @@ function renderGrid(model, assignment) {
         const si = di * per + k, key = si + "|" + g, list = cells[key] || [];
         const target = targets.has(key);
         if (!list.length) {
-          html += `<td class="cell empty${target ? " valid-move" : ""}" data-si="${si}">${target ? "+" : "—"}</td>`;
+          html += `<td class="cell empty${target ? " valid-move" : ""}" data-si="${si}">${target ? "+" : ""}</td>`;
           return;
         }
         const body = list.map(({ i, start }) => {
