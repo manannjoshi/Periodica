@@ -1808,12 +1808,13 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
     const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {"Content-Type": "application/json", "Authorization": "Bearer " + apiKey},
-      body: JSON.stringify({model: "openai/gpt-oss-20b", messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4})
+      body: JSON.stringify({model: "openai/gpt-oss-20b", messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4, max_completion_tokens: 4096})
     });
     const data = await resp.json();
     console.log(data);
     console.log(data);
-    const content = data.choices?.[0]?.message?.content || data.error?.message || JSON.stringify(data);
+    const msg = data.choices?.[0]?.message || {};
+    const content = msg.content || msg.reasoning || data.error?.message || JSON.stringify(data);
     let box = document.getElementById("aiAnalysisBox");
     if (!box) {
       box = document.createElement("section");
