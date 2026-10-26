@@ -896,6 +896,7 @@ function renderAll() {
   renderSlotPreview();
   renderPeople();
   renderCourses();
+  renderOtherBlocks();
 }
 
 /* ================= setup panel: input handling ================= */
@@ -993,6 +994,7 @@ for (const [id, read] of Object.entries(weekFields)) {
     save();
     renderSlotPreview();
     if (id === "days") { renderPeople(); renderLoad(); renderOtherBlocks(); } // blocked days are checked against the day list
+    else if (id === "startTime" || id === "periodMinutes" || id === "breakMinutes" || id === "dayEnd") { renderOtherBlocks(); }
   });
 }
 
