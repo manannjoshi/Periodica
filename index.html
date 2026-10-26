@@ -2026,7 +2026,11 @@ const savedOpen = store.get(SETUP_KEY);
 if (savedOpen !== null) setupEl.open = savedOpen === "1";
 setupEl.addEventListener("toggle", () => store.set(SETUP_KEY, setupEl.open ? "1" : "0"));
 
-if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
+if (document.getElementById('trSec')) { 
+  document.getElementById('trSec').classList.add('collapsed'); 
+  const h = document.querySelector('.collapsible[data-target="trSec"] .collapser');
+  if (h) h.textContent = "+";
+}
 
 renderAll();
 showResult(null);
