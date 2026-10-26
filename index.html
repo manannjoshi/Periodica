@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<title>Periodica 1.15</title>
+<title>Periodica</title>
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -23,14 +23,14 @@
       <h1>Periodica <span class="ver">1.15</span></h1>
     </div>
     <div class="bar-actions">
-      <button id="theme" class="theme-btn" type="button" aria-pressed="true">Light mode</button>
+      <button id="theme" class="theme-btn" type="button" aria-pressed="false">Dark mode</button>
     </div>
   </div>
 </header>
 
 <main class="wrap" id="main">
 
-  <details id="setup">
+  <details id="setup" open>
     <summary>Setup<span class="sum-hint">week · teachers · rooms · classes</span></summary>
     <div class="setup-body">
 
@@ -71,26 +71,23 @@
       </section>
 
       <section>
-        <h2 class="collapsible" data-target="classesSec" style="flex-wrap:wrap;"><span style="display:flex;align-items:center;gap:9px;">Classes</span><div id="batchActions" style="display:none; gap:8px; align-items:center; margin-left:auto;"><button id="batchSplit" type="button" class="ghost">Split to CS 11 & CS 12</button><button id="batchDuplicate" type="button" class="ghost">Duplicate selected</button><button id="batchDelete" type="button" class="ghost">Delete selected</button></div><button id="addCourse" type="button" onclick="event.stopPropagation(); event.preventDefault();" style="margin-left:auto;">+ add class</button></h2>
+        <h2 class="collapsible" data-target="classesSec" style="flex-wrap:wrap;"><span style="display:flex;align-items:center;gap:9px;">Classes</span><div id="batchActions" style="display:none; gap:8px; align-items:center; margin-left:auto;"><button id="batchSplit" type="button" class="ghost">Split to CS 11 & CS 12</button><button id="batchDuplicate" type="button" class="ghost">Duplicate selected</button><button id="batchDelete" type="button" class="ghost">Delete selected</button></div><button id="addCourse" type="button" onclick="event.stopPropagation(); event.preventDefault();" style="margin-left:auto; display:none;">+ add class</button></h2>
         <div id="classesSec" class="collapsible-content collapsed">
         <div class="table-wrap">
           <table>
             <thead><tr>
               <th class="sel"><input type="checkbox" id="selectAll" style="width:16px;height:16px"></th>
-              <th>Course<small>e.g. CSL110</small></th>
+              <th>Subject<small>e.g. CSL110</small></th>
               <th>Section<small>e.g. F</small></th>
-              <th>Batch<small>blank = whole section</small></th>
-              <th>Teacher<small>from the list above</small></th>
-              <th>Meetings / week<small>blank = auto</small></th>
-              <th>Periods / meeting<small>1 theory, 2 lab</small></th>
-              <!-- room type column removed -->
-              <!-- students column removed -->
+              <th>Batch<small>optional</small></th>
+              <th>Teacher<small>from list above</small></th>
+              <th>Times / week<small>Auto = 2-4 classes</small></th>
               <th></th>
             </tr></thead>
             <tbody id="courseRows"></tbody>
           </table>
         </div>
-        <div class="hint" style="margin-top:8px">Each row is one course taught to one section (or one batch of it). A meeting is one sitting: 1 period for theory, 2 periods back to back for a lab. A batch class can run at the same time as the other batch's class; a whole-section class cannot. With Meetings / week blank, Periodica picks 2 to 4 for theory and 1 for a lab.</div>
+        <div class="hint" style="margin-top:8px">One row = one subject for one section. Fill in Subject, Section and Teacher. Leave Times / week on Auto unless you need a fixed number. Batch is optional — leave it blank for the whole section.</div>
         <div id="load" class="hint" style="margin-top:6px"></div>
         <div class="row" style="margin-top:10px; gap:8px; flex-wrap:wrap; align-items:center;">
           <label>copy section <select id="copyFrom"></select></label>
@@ -110,7 +107,7 @@
             <label>To <select id="obTo"></select></label>
             <button id="obAdd" type="button">Add block</button>
           </div>
-          <div class="table-wrap">
+          <div id="obTableWrap" class="table-wrap" style="display:none;">
             <table>
               <thead><tr><th>Teacher</th><th>Day</th><th>Periods</th><th></th></tr></thead>
               <tbody id="obRows"></tbody>
@@ -142,6 +139,17 @@
 
   <div id="msg" class="msg" role="status" aria-live="polite"></div>
   <div id="stats"></div>
+  <section id="aiAnalysisBox" style="margin-top:14px; display:none;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <h2 style="margin:0; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
+        AI Timetable Overview
+      </h2>
+      <button id="aiAnalysisClose" type="button" class="ghost" style="padding:0 8px; height:26px; font-size:12px; display:inline-flex; align-items:center; gap:4px;" aria-label="Close AI Overview" title="Close AI Overview">
+        <span>Close</span> ×
+      </button>
+    </div>
+    <div id="aiAnalysisOut" style="white-space:pre-wrap; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); line-height:1.6; font-size:13.5px; color:var(--ink);"></div>
+  </section>
   <section id="advisor" style="margin-top:16px; display:none;">
     <h2 style="margin:0 0 10px; font-size:15px;">Timetable Advisor</h2>
     <div id="advisorList" class="stack" style="display:grid; gap:8px;"></div>
@@ -150,6 +158,11 @@
 
 </main>
 
+<button id="scrollJump" class="scroll-jump" type="button" aria-label="Scroll to bottom" title="Scroll to bottom" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+    <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+</button>
 
 <script src="ui.js"></script>
 </body>

@@ -65,9 +65,9 @@ function sampleData() {
 /* ================= state ================= */
 // teachers and rooms are kept as the text typed in the setup panel and parsed on demand,
 // so a typo never loses a line.
-const KEY = "periodica.data.v6";
-const THEME_KEY = "periodica.theme";
-const SETUP_KEY = "periodica.setup";
+const KEY = "periodica.data.v7";
+const THEME_KEY = "periodica.theme.v2";
+const SETUP_KEY = "periodica.setup.v2";
 
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -80,6 +80,17 @@ let lastResult = null;       // { model, assignment, info } of the timetable on 
 let generation = 0;          // Generate press counter, used as the variety seed
 let rescheduleMode = false;
 let rescheduleSel = null;    // { sessionIdx }
+
+function emptyData() {
+  return {
+    ...WEEK,
+    teachers: "",
+    rooms: "",
+    courses: [],
+    otherBlocks: "",
+    otherBlocksArr: [],
+  };
+}
 
 function load() {
   // try share link first
@@ -105,10 +116,7 @@ function load() {
       return s;
     }
   } catch (e) { /* fall through */ }
-  const sd = sampleData();
-  sd.otherBlocks = "";
-  sd.otherBlocksArr = [];
-  return sd;
+  return emptyData();
 }
 function save() { store.set(KEY, JSON.stringify(state)); }
 
@@ -174,6 +182,10 @@ function renderOtherBlocks() {
     if (obTo.options.length) obTo.value = periods;
   }
   const tb = document.getElementById("obRows");
+  const wrap = document.getElementById("obTableWrap");
+  if (wrap) {
+    wrap.style.display = (state.otherBlocksArr && state.otherBlocksArr.length > 0) ? "" : "none";
+  }
   if (tb) {
     tb.innerHTML = "";
     state.otherBlocksArr.forEach((b, idx) => {
@@ -301,25 +313,30 @@ function renderPeople() {
 
 function renderCourses() {
   const names = parseTeachers(state.teachers).items.map(t => t.name);
-// typeOpts removed
   const cell = (c, i, f, cls, extra = "") =>
     `<td><input ${cls ? `class="${cls}" ` : ""}data-i="${i}" data-f="${f}" value="${esc(c[f] == null ? "" : c[f])}" ${extra}></td>`;
+  const selectCell = (c, i, f, options) => {
+    const current = c[f] == null ? "" : String(c[f]);
+    const list = options.slice();
+    if (!list.some(([v]) => v === current)) list.push([current, current || "Auto"]);
+    const html = list.map(([v, label]) =>
+      `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(label)}</option>`).join("");
+    return `<td><select data-i="${i}" data-f="${f}">${html}</select></td>`;
+  };
 
   $("courseRows").innerHTML = state.courses.map((c, i) => {
     const opts = names.slice();
     if (c.teacher && !opts.includes(c.teacher)) opts.unshift(c.teacher);
     const teacherOpts = opts.map(n =>
       `<option value="${esc(n)}"${n === c.teacher ? " selected" : ""}>${esc(n)}${names.includes(n) ? "" : " (not in list)"}</option>`).join("");
+    const times = [["", "Auto"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"], ["6", "6"], ["7", "7"], ["8", "8"]];
     return `<tr data-idx="${i}">
       <td class="sel"><input type="checkbox" class="row-sel" data-idx="${i}" style="width:16px;height:16px"></td>
       ${cell(c, i, "code", "w-code")}
       ${cell(c, i, "section", "w-sec")}
       ${cell(c, i, "batch", "w-sec", 'placeholder="all"')}
       <td><select data-i="${i}" data-f="teacher">${teacherOpts}</select></td>
-      ${cell(c, i, "blocksPerWeek", "", 'type="number" min="1" max="40" placeholder="auto"')}
-      ${cell(c, i, "blockPeriods", "", 'type="number" min="1" max="14"')}
-<td><!-- room type removed --></td>
-      <td><!-- size removed --></td>
+      ${selectCell(c, i, "blocksPerWeek", times)}
       <td><button class="del" data-del="${i}" aria-label="Delete this class row">x</button></td>
     </tr>`;
   }).join("");
@@ -335,7 +352,7 @@ function renderCopyOptions() {
   if (secs.includes(prev)) sel.value = prev;
 }
 
-/* meetings a week per section, so the "about 3 a day" target can be checked while editing */
+/* classes a week per section, so the "about 3 a day" target can be checked while editing */
 function renderLoad() {
   const counts = meetingCounts(), bySection = {};
   state.courses.forEach((c, i) => { if (c.section) bySection[c.section] = (bySection[c.section] || 0) + counts[i]; });
@@ -343,8 +360,8 @@ function renderLoad() {
   if (!secs.length || !days) { $("load").textContent = ""; return; }
   const perDay = secs.map(s => bySection[s] / days);
   const lo = Math.min(...perDay).toFixed(1), hi = Math.max(...perDay).toFixed(1);
-  $("load").textContent = "Meetings a week: " + secs.map(s => s + " " + bySection[s]).join(" · ") +
-    "  (" + (lo === hi ? lo : lo + " to " + hi) + " a day per section, both batches counted)";
+  $("load").textContent = "Classes per week: " + secs.map(s => s + " " + bySection[s]).join(" · ") +
+    "  (about " + (lo === hi ? lo : lo + "-" + hi) + " per day per section)";
 }
 
 function renderAll() {
@@ -386,9 +403,11 @@ $("courseRows").addEventListener("click", e => {
 });
 
 function updateBatchActions() {
+  const classesSec = document.getElementById("classesSec");
+  const isCollapsed = classesSec ? classesSec.classList.contains("collapsed") : false;
   const checked = document.querySelectorAll(".row-sel:checked").length;
   const ba = document.getElementById("batchActions");
-  if (ba) ba.style.display = checked > 0 ? "flex" : "none";
+  if (ba) ba.style.display = (!isCollapsed && checked > 0) ? "flex" : "none";
 }
 
 // Select all
@@ -415,6 +434,9 @@ $("batchDelete")?.addEventListener("click", () => {
   indices.forEach(i => state.courses.splice(i, 1));
   save();
   renderCourses();
+  const sa = document.getElementById("selectAll");
+  if (sa) sa.checked = false;
+  updateBatchActions();
 });
 
 $("batchDuplicate")?.addEventListener("click", () => {
@@ -424,20 +446,27 @@ $("batchDuplicate")?.addEventListener("click", () => {
 });
 
 $("batchSplit")?.addEventListener("click", () => {
-  const indices = [...document.querySelectorAll(".row-sel:checked")].map(cb => +cb.dataset.idx);
-  if (!indices.length) return alert("Select rows first");
-  const additions = [];
-  indices.forEach(i => {
+  const checked = [...document.querySelectorAll(".row-sel:checked")].map(cb => +cb.dataset.idx);
+  if (!checked.length) return alert("Select rows first");
+  const valid = checked.filter(i => {
     const c = state.courses[i];
-    if (c.batch && c.batch.trim()) return; // already has batch
-    const c1 = {...c, batch: "CS 11"};
-    const c2 = {...c, batch: "CS 12"};
-    additions.push(c1, c2);
+    return c && (!c.batch || !c.batch.trim());
+  }).sort((a, b) => b - a);
+
+  if (!valid.length) return alert("Selected rows already have batches or none are valid to split.");
+
+  valid.forEach(i => {
+    const c = state.courses[i];
+    const c1 = { ...c, batch: "CS 11" };
+    const c2 = { ...c, batch: "CS 12" };
+    state.courses.splice(i, 1, c1, c2);
   });
-  if (!additions.length) return alert("Selected rows already have batches or none valid");
-  state.courses.push(...additions);
+
   save();
   renderCourses();
+  const sa = document.getElementById("selectAll");
+  if (sa) sa.checked = false;
+  updateBatchActions();
 });
 
 $("teachers").addEventListener("input", e => { state.teachers = e.target.value; save(); renderPeople(); renderCourses(); renderOtherBlocks(); });
@@ -463,7 +492,7 @@ for (const [id, read] of Object.entries(weekFields)) {
 
 $("addCourse").onclick = () => {
   const first = parseTeachers(state.teachers).items[0];
-  state.courses.push({ code: "", section: "", batch: "", teacher: first ? first.name : "", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 });
+  state.courses.unshift({ code: "", section: "", batch: "", teacher: first ? first.name : "", blocksPerWeek: "", blockPeriods: 1, roomType: "class", size: 40 });
   save();
   renderCourses();
 };
@@ -490,12 +519,12 @@ function resetData(next) {
 }
 $("sample").onclick = () => { if (confirm("Replace the current setup with the sample data?")) resetData(sampleData()); };
 $("clear").onclick = () => {
-  if (confirm("Clear all teachers, rooms and classes?")) resetData({ ...WEEK, teachers: "", rooms: "", courses: [], otherBlocksArr: [] });
+  if (confirm("Clear all teachers, rooms and classes?")) resetData(emptyData());
 };
 
 /* ================= model ================= */
-/* How many times each class row meets in a week. A blank cell means "auto": a lab (or any
-   multi-period class) meets once, theory meets 2-4 times, fewer if the rooms cannot hold more. */
+/* How many times each class row meets in a week. A blank cell means "auto": 2-4 times,
+   fewer if the rooms cannot hold more. */
 function meetingCounts() {
   const rooms = parseRooms(state.rooms).items;
   const sectionsOfCode = {};
@@ -504,8 +533,6 @@ function meetingCounts() {
 
   return state.courses.map(c => {
     if (c.blocksPerWeek !== "" && c.blocksPerWeek != null) return Math.max(0, Math.floor(Number(c.blocksPerWeek) || 0));
-    const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
-    if (span > 1) return 1;
     let h = 0;
     for (const ch of c.code || "") h = (h * 31 + ch.charCodeAt(0)) % 997;
     const roomCount = rooms.length;
@@ -604,7 +631,7 @@ function buildModel() {
   const counts = meetingCounts();
   const sessions = [];
   state.courses.forEach((c, row) => {
-    const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
+    const span = 1;
     const tid = teacherId[c.teacher] != null ? teacherId[c.teacher] : -1;
     if (sectionIndex[c.section] == null) sectionIndex[c.section] = Object.keys(sectionIndex).length;
     const atoms = atomsFor(c.section, c.batch);
@@ -663,7 +690,7 @@ function diagnose(model, domains) {
   const dupSet = new Set();
   const keys = [];
   state.courses.forEach((c, idx) => {
-    const key = `${c.code}|${c.section}|${c.batch||''}|${c.teacher}|${c.blocksPerWeek}|${c.blockPeriods}`;
+    const key = `${c.code}|${c.section}|${c.batch||''}|${c.teacher}|${c.blocksPerWeek}`;
     keys.push(key);
   });
   keys.forEach((k, idx) => {
@@ -675,8 +702,6 @@ function diagnose(model, domains) {
     if (!c.section) out.push(`${name}: no section.`);
     if (c.teacher && !model.teachers.some(t => t.name === c.teacher)) out.push(`${name}: teacher "${c.teacher}" is not in the teacher list.`);
     if (c.blocksPerWeek !== "" && Number(c.blocksPerWeek) <= 0) out.push(`${name}: meetings per week must be at least 1 (or blank).`);
-    if (Number(c.blockPeriods) < 1) out.push(`${name}: a meeting needs at least 1 period.`);
-    if (per && Number(c.blockPeriods) > per) out.push(`${name}: a ${c.blockPeriods}-period meeting does not fit in a day of ${per} periods.`);
     if (dupSet.has(idx)) out.push(`${name}: exact duplicate of another row. Change teacher/batch/meetings or use 'Split to CS 11 & CS 12' or delete one of them.`);
   });
   if (out.length) return [...new Set(out)];   // the checks below assume a well-formed setup
@@ -1043,7 +1068,8 @@ function applyTheme(t) {
   b.setAttribute("aria-pressed", String(t === "dark"));
 }
 $("theme").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+const savedTheme = store.get(THEME_KEY);
+applyTheme(savedTheme === "dark" ? "dark" : "light");
 
 /* ================= generate ================= */
 /* The one place that changes what is on screen: a result, or nothing. */
@@ -1056,6 +1082,8 @@ function showResult(result, statsHtml) {
   $("reschedule").hidden = !result;   // only make sense with a timetable on screen
   const aiBtn = document.getElementById("analyseAi");
   if (aiBtn) aiBtn.hidden = !result;
+  const aiBox = document.getElementById("aiAnalysisBox");
+  if (!result && aiBox) aiBox.style.display = "none";
   if (result) {
     renderStats(result);
     renderGrid(result.model, result.assignment);
@@ -1066,6 +1094,8 @@ function showResult(result, statsHtml) {
 }
 
 function generate() {
+  const aiBox = document.getElementById("aiAnalysisBox");
+  if (aiBox) aiBox.style.display = "none";
   const model = buildModel();
   const domains = buildDomains(model);
   const problems = diagnose(model, domains);
@@ -1112,7 +1142,6 @@ $("generate").onclick = generate;
 $("view").onchange = () => {
   if (!lastResult) return;
   exitRescheduleMode();
-  renderGrid(lastResult.model, lastResult.assignment);
 };
 
 /* ================= reschedule ================= */
@@ -1121,7 +1150,7 @@ function enterRescheduleMode() {
   rescheduleSel = null;
   $("reschedule").textContent = "Exit Reschedule";
   $("reschedule").classList.add("on");
-  setMsg("Click a class to select it. Valid slots turn green.", "info");
+  setMsg("Click a class to select it. Green cells are legal moves; click a busy slot to see why it is blocked.", "info");
   renderGrid(lastResult.model, lastResult.assignment);
 }
 
@@ -1131,6 +1160,7 @@ function exitRescheduleMode() {
   $("reschedule").textContent = "Reschedule";
   $("reschedule").classList.remove("on");
   setMsg("");
+  if (lastResult) renderGrid(lastResult.model, lastResult.assignment);
 }
 
 document.getElementById("csvImport")?.addEventListener("click", function(){ document.getElementById("csvFile")?.click(); });
@@ -1308,10 +1338,19 @@ $("reschedule").onclick = () => {
   if (rescheduleMode) exitRescheduleMode(); else enterRescheduleMode();
 };
 
-const SYSTEM_PROMPT = "You are an academic scheduling expert analyzing a generated timetable. CRITICAL RULES: 1. Course hours and teacher assignments are FIXED academic requirements decided by department syllabus and cannot be changed. Do NOT tell administrators to cut or add course sessions, change curriculum credits, or swap assigned teachers. 2. Focus on schedule execution quality: conflict-free verification, even distribution across days, and daily pace. 3. If clashCount is 0, clearly confirm the timetable is fully conflict-free and valid for publication. 4. Give 1 or 2 practical operational observations for managing the schedule smoothly (such as room turnarounds or peak day monitoring). Format: Short practical analysis. Max 200 words. Plain text only, no markdown, no asterisks, no bold, no underscores.";
+const SYSTEM_PROMPT = `You are a principal academic scheduling analyst providing a thorough executive briefing on a generated timetable.
+CRITICAL RULES:
+1. Course hours and teacher assignments are FIXED academic requirements mandated by syllabus and department curriculum—never suggest cutting sessions, adding credits, or swapping assigned faculty.
+2. Deliver a comprehensive, in-depth analytical summary (approximately 250 to 350 words) organized into four clear sections:
+   - SCHEDULE INTEGRITY & PACING: Confirm conflict-free status, evaluate week-wide session distribution, and overall timetable balance.
+   - FACULTY WORKLOAD & CONTINUITY: Highlight specific teachers with peak day loads or consecutive period streaks by name, and analyze teaching continuity.
+   - ROOM & FACILITY UTILIZATION: Analyze space utilization rates, call out high-demand rooms or underutilized labs by name, and note turnaround windows.
+   - STUDENT COHORT RHYTHM & OPERATIONAL ADVICE: Note cohort heavy/light days, any idle gaps between classes, and provide 2-3 concrete operational tips for campus administrators.
+3. Always reference specific teacher names, section labels, room names, and days from the data to keep the analysis concrete and insightful.
+Format: Plain text only, organized with clear capitalized section headers as shown above. No markdown asterisks, no bullet asterisks, no bold syntax, no underscores.`;
 
 async function runGroqDirect(apiKey, summary) {
-  const userMsg = "Summary:\n" + JSON.stringify(summary);
+  const userMsg = `Timetable Generation Run: #${summary.generation}\n\nComprehensive Schedule Metrics & Detected Patterns:\n` + JSON.stringify(summary, null, 2);
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -1324,7 +1363,7 @@ async function runGroqDirect(apiKey, summary) {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userMsg }
       ],
-      temperature: 0.3,
+      temperature: 0.7,
       max_completion_tokens: 4096
     })
   });
@@ -1355,25 +1394,120 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
     }
 
     const model = lastResult.model, assignment = lastResult.assignment;
+    const days = model.days;
+    const per = model.per;
+
+    const teacherDayLoad = {};
+    const teacherDayPeriods = {};
+    const roomDayLoad = {};
+    const roomTotalUse = {};
+    const sectionDayPeriods = {};
+
     const teacherLoad = {};
     const courseLoad = {};
     const sectionLoad = {};
+
     model.sessions.forEach((ses, si) => {
       const a = assignment[si];
       if (!a || a.si < 0) return;
+      const slot = model.slots[a.si];
+      const day = slot.day;
+      const pIdx = slot.index;
+      const room = a.room || model.rooms[a.ri]?.name || "Unknown";
+
+      // Teacher load
       const t = ses.teacher || "Unknown";
       teacherLoad[t] = (teacherLoad[t] || 0) + 1;
+      if (!teacherDayLoad[t]) teacherDayLoad[t] = {};
+      teacherDayLoad[t][day] = (teacherDayLoad[t][day] || 0) + 1;
+      if (!teacherDayPeriods[t]) teacherDayPeriods[t] = {};
+      if (!teacherDayPeriods[t][day]) teacherDayPeriods[t][day] = [];
+      teacherDayPeriods[t][day].push(pIdx);
+
+      // Room load
+      roomTotalUse[room] = (roomTotalUse[room] || 0) + 1;
+      if (!roomDayLoad[room]) roomDayLoad[room] = {};
+      roomDayLoad[room][day] = (roomDayLoad[room][day] || 0) + 1;
+
+      // Section load
+      const secKey = ses.section + (ses.batch ? "/" + ses.batch : "");
+      sectionLoad[secKey] = (sectionLoad[secKey] || 0) + 1;
+      if (!sectionDayPeriods[secKey]) sectionDayPeriods[secKey] = {};
+      if (!sectionDayPeriods[secKey][day]) sectionDayPeriods[secKey][day] = [];
+      sectionDayPeriods[secKey][day].push(pIdx);
+
+      // Course load
       const c = ses.code || "Unknown";
       courseLoad[c] = (courseLoad[c] || 0) + 1;
-      const s = ses.section + (ses.batch ? "/" + ses.batch : "");
-      sectionLoad[s] = (sectionLoad[s] || 0) + 1;
     });
+
+    // Detect teacher highlights: peak day & consecutive streaks
+    const teacherHighlights = [];
+    for (const [t, dayMap] of Object.entries(teacherDayLoad)) {
+      let maxDay = "", maxCount = 0;
+      for (const [d, cnt] of Object.entries(dayMap)) {
+        if (cnt > maxCount) { maxCount = cnt; maxDay = d; }
+      }
+      let maxStreak = 1;
+      for (const [d, plist] of Object.entries(teacherDayPeriods[t] || {})) {
+        const sorted = [...plist].sort((x, y) => x - y);
+        let currStreak = 1;
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i] === sorted[i - 1] + 1) {
+            currStreak++;
+            if (currStreak > maxStreak) maxStreak = currStreak;
+          } else {
+            currStreak = 1;
+          }
+        }
+      }
+      if (maxCount >= 3 || maxStreak >= 2) {
+        teacherHighlights.push(`${t}: peak ${maxCount} periods on ${maxDay}${maxStreak >= 2 ? ` (${maxStreak} consecutive)` : ""}`);
+      }
+    }
+
+    // Detect room highlights
+    const totalSlotsPerRoom = (days.length || 5) * (per || 8);
+    const roomHighlights = [];
+    const sortedRooms = Object.entries(roomTotalUse).sort((a, b) => b[1] - a[1]);
+    for (const [r, count] of sortedRooms) {
+      const pct = Math.round((count / totalSlotsPerRoom) * 100);
+      let busiestDay = "", bCount = 0;
+      for (const [d, c] of Object.entries(roomDayLoad[r] || {})) {
+        if (c > bCount) { bCount = c; busiestDay = d; }
+      }
+      if (pct >= 40 || pct <= 20) {
+        roomHighlights.push(`${r}: ${pct}% weekly use (peak ${bCount}/${per} periods on ${busiestDay})`);
+      }
+    }
+
+    // Detect student highlights: heaviest day & idle gaps
+    const studentHighlights = [];
+    for (const [sec, dayMap] of Object.entries(sectionDayPeriods)) {
+      let maxD = "", maxC = 0;
+      let hasGap = false, gapInfo = "";
+      for (const [d, plist] of Object.entries(dayMap)) {
+        if (plist.length > maxC) { maxC = plist.length; maxD = d; }
+        const sorted = [...plist].sort((x, y) => x - y);
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i] > sorted[i - 1] + 1) {
+            hasGap = true;
+            gapInfo = `${d} has ${sorted[i] - sorted[i - 1] - 1} idle period(s) between classes`;
+            break;
+          }
+        }
+      }
+      if (maxC >= 4 || hasGap) {
+        studentHighlights.push(`Section ${sec}: heaviest on ${maxD} (${maxC} classes)${gapInfo ? `, ${gapInfo}` : ""}`);
+      }
+    }
+
     const teacherLoadSorted = Object.entries(teacherLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({teacher:k, sessions:v}));
     const sectionLoadSorted = Object.entries(sectionLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({section:k, sessions:v}));
     const courseLoadSorted = Object.entries(courseLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({course:k, sessions:v}));
     const clashes = verify(model, assignment);
     const dailySessions = {};
-    model.days.forEach(d => { dailySessions[d] = 0; });
+    days.forEach(d => { dailySessions[d] = 0; });
     model.sessions.forEach((ses, si) => {
       const a = assignment[si];
       if (!a || a.si < 0) return;
@@ -1382,11 +1516,15 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
     });
 
     const summary = {
+      generation,
       days: model.days,
-      periodsPerDay: model.perDay,
+      periodsPerDay: model.per,
       totalSessions: model.sessions.length,
       clashCount: clashes.length,
       dailyDistribution: dailySessions,
+      teacherHighlights: teacherHighlights.slice(0, 12),
+      roomHighlights: roomHighlights.slice(0, 12),
+      studentHighlights: studentHighlights.slice(0, 12),
       teacherLoad: teacherLoadSorted,
       courseLoad: courseLoadSorted,
       sectionLoad: sectionLoadSorted
@@ -1443,16 +1581,14 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
       }
     }
 
-    let box = document.getElementById("aiAnalysisBox");
-    if (!box) {
-      box = document.createElement("section");
-      box.id = "aiAnalysisBox";
-      box.style.cssText = "margin-top:18px;";
-      box.innerHTML = "<h2 style='margin:0 0 10px; font-size:15px;'>AI Analysis</h2><div id='aiAnalysisOut' style='white-space:pre-wrap; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); line-height:1.6;'></div>";
-      document.getElementById("grid").parentNode.insertBefore(box, document.getElementById("grid").nextSibling);
+    const box = document.getElementById("aiAnalysisBox");
+    const out = document.getElementById("aiAnalysisOut");
+    if (out) out.textContent = content;
+    if (out) out.textContent = content;
+    if (box) {
+      box.style.display = "block";
+      box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
-    document.getElementById("aiAnalysisOut").textContent = content;
-    box.style.display = "block";
   } catch(e) {
     let msg = e.message || "Unknown error";
     alert("Analysis Failed:\n\n" + msg);
@@ -1460,6 +1596,11 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
     const btn = document.getElementById("analyseAi");
     if (btn) { btn.disabled = false; btn.textContent = "Analyse with AI"; }
   }
+});
+
+document.getElementById("aiAnalysisClose")?.addEventListener("click", () => {
+  const box = document.getElementById("aiAnalysisBox");
+  if (box) box.style.display = "none";
 });
 
 /* every (start, room) the class could move to, given everything else stays put */
@@ -1504,6 +1645,62 @@ function whyBlocked(model, assignment, idx) {
   return none + ".\n" + reason + ", e.g. " + where + ".\nMove that class first, or press Generate for a fresh timetable.";
 }
 
+function explainBlockedAt(td) {
+  if (!rescheduleSel || !lastResult) return;
+  const { model, assignment } = lastResult;
+  const idx = rescheduleSel.sessionIdx, s = model.sessions[idx];
+  const si = Number(td.dataset.si);
+  const view = $("view").value, group = td.closest("table")?.dataset.g;
+  const who = label(s) + " (" + s.teacher + ")";
+  const slot = model.slots[si], at = slot ? slot.day + " " + slot.label : "that slot";
+
+  if (view === "section" && group !== s.section) {
+    setMsg(`${who} is in Section ${s.section}. Use a green cell in the Section ${s.section} table.`, "err");
+    return;
+  }
+  if (view === "teacher" && group !== s.teacher) {
+    setMsg(`${who} is taught by ${s.teacher}. Use a green cell in the ${s.teacher} table.`, "err");
+    return;
+  }
+
+  const cur = assignment[idx];
+  if (cur && cur.si === si && (view !== "room" || cur.room === group)) {
+    setMsg(`${who} is already in ${at}${cur.room ? " in " + cur.room : ""}. Pick a green cell to move it.`, "info");
+    return;
+  }
+
+  const reasons = [];
+  if (s.tid >= 0 && model.offSlot[s.tid * model.N + si]) reasons.push(`${s.teacher} is marked unavailable at that time`);
+
+  const occupants = [];
+  model.sessions.forEach((t, j) => {
+    const a = assignment[j];
+    if (!a || j === idx || a.si > si || si >= a.si + t.span) return;
+    occupants.push({ t, a });
+  });
+  const teacherBusy = s.tid >= 0 && occupants.find(o => o.t.tid === s.tid);
+  if (teacherBusy) reasons.push(`${s.teacher} is already teaching ${label(teacherBusy.t)} in ${teacherBusy.a.room}`);
+  const sectionBusy = occupants.find(o => o.t.atoms.some(a => s.atoms.includes(a)));
+  if (sectionBusy && sectionBusy !== teacherBusy) reasons.push(`${label(sectionBusy.t)} already uses that section/batch`);
+
+  const targetRoom = view === "room" ? model.rooms.findIndex(r => r.name === group) : -1;
+  const roomsToCheck = targetRoom >= 0 ? [targetRoom] : eligibleRooms(model, s);
+  if (!roomsToCheck.some(ri => !occupants.some(o => o.a.ri === ri))) {
+    if (view === "room") {
+      const occupant = occupants.find(o => o.a.ri === targetRoom);
+      reasons.push(`Room ${group} is already used by ${occupant ? label(occupant.t) : "another class"}`);
+    } else {
+      reasons.push("all classrooms are already in use at that time");
+    }
+  }
+
+  if (!reasons.length) {
+    setMsg(`${who} cannot move to ${at}. Pick a green cell, or Exit Reschedule to choose another class.`, "err");
+    return;
+  }
+  setMsg(`${who} cannot move to ${at}:\n- ${[...new Set(reasons)].join("\n- ")}\nPick a green cell, or Exit Reschedule to choose another class.`, "err");
+}
+
 function selectClass(idx) {
   const { model, assignment } = lastResult;
   rescheduleSel = { sessionIdx: idx };
@@ -1546,9 +1743,9 @@ $("grid").addEventListener("click", e => {
   const hit = e.target.closest("[data-i]") || (td && td.querySelector("[data-i]"));
   if (!rescheduleSel && hit) { selectClass(+hit.dataset.i); return; }
 
-  if (rescheduleSel) {   // clicked away: back to normal
-    exitRescheduleMode();
-    renderGrid(lastResult.model, lastResult.assignment);
+  if (rescheduleSel) {   // clicked a cell: explain why it cannot be used
+    if (td) explainBlockedAt(td);
+    else exitRescheduleMode();
   }
 });
 
@@ -1570,22 +1767,87 @@ document.addEventListener("click", e => {
     if (collapser) collapser.textContent = "+";
   }
   if (target === "classesSec") {
+    const isCollapsed = content.classList.contains("collapsed");
     const addBtn = document.getElementById("addCourse");
-    if (addBtn) addBtn.style.display = content.classList.contains("collapsed") ? "none" : "inline-flex";
+    if (addBtn) addBtn.style.display = isCollapsed ? "none" : "inline-flex";
+    updateBatchActions();
   }
 });
+
+/* ================= scroll jump ================= */
+const scrollJump = $("scrollJump");
+let scrollFrame = 0;
+let scrollTween = 0;
+
+function scrollLimit() {
+  return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+}
+
+function atPageBottom() {
+  const limit = scrollLimit();
+  return limit > 0 && window.scrollY >= limit - 2;
+}
+
+function updateScrollJump() {
+  if (!scrollJump || scrollTween) return;
+  const bottom = atPageBottom();
+  scrollJump.hidden = false;
+  scrollJump.classList.toggle("at-bottom", bottom);
+  const text = bottom ? "Scroll to top" : "Scroll to bottom";
+  if (scrollJump.getAttribute("aria-label") !== text) {
+    scrollJump.setAttribute("aria-label", text);
+    scrollJump.title = text;
+  }
+}
+
+function smoothScrollTo(target) {
+  cancelAnimationFrame(scrollTween);
+  scrollTween = 0;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    window.scrollTo(0, target);
+    updateScrollJump();
+    return;
+  }
+  const start = window.scrollY, delta = target - start;
+  if (Math.abs(delta) < 2) return;
+  const duration = Math.min(650, Math.max(320, Math.abs(delta) * 0.35));
+  const t0 = performance.now();
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  function step(now) {
+    const t = Math.min(1, (now - t0) / duration);
+    window.scrollTo(0, start + delta * ease(t));
+    if (t < 1) scrollTween = requestAnimationFrame(step);
+    else { scrollTween = 0; updateScrollJump(); }
+  }
+  scrollTween = requestAnimationFrame(step);
+}
+
+if (scrollJump) {
+  scrollJump.addEventListener("click", () => smoothScrollTo(atPageBottom() ? 0 : scrollLimit()));
+  window.addEventListener("scroll", () => {
+    if (scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => { scrollFrame = 0; updateScrollJump(); });
+  }, { passive: true });
+  window.addEventListener("resize", updateScrollJump);
+  ["wheel", "touchstart"].forEach(name => window.addEventListener(name, () => {
+    cancelAnimationFrame(scrollTween); scrollTween = 0;
+  }, { passive: true }));
+  if ("ResizeObserver" in window) new ResizeObserver(updateScrollJump).observe(document.body);
+  updateScrollJump();
+}
 
 /* ================= boot ================= */
 const setupEl = $("setup");
 const savedOpen = store.get(SETUP_KEY);
 if (savedOpen !== null) setupEl.open = savedOpen === "1";
+else setupEl.open = true;
 setupEl.addEventListener("toggle", () => store.set(SETUP_KEY, setupEl.open ? "1" : "0"));
 
-if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
-
-if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
-if (document.getElementById('classesSec')) { document.getElementById('classesSec').classList.add('collapsed'); }
-var addBtnInit=document.getElementById('addCourse'); if(addBtnInit) addBtnInit.style.display='none';
+const addBtnInit = document.getElementById('addCourse');
+const classesSec = document.getElementById('classesSec');
+if (addBtnInit && classesSec) {
+  addBtnInit.style.display = classesSec.classList.contains('collapsed') ? 'none' : 'inline-flex';
+}
 renderAll();
 showResult(null);
 if (pendingSharedResult) applySharedResult(pendingSharedResult);

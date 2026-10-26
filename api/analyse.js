@@ -51,6 +51,20 @@ function validateAndSanitizeSummary(raw) {
     throw new Error("Invalid payload: summary must be a valid JSON object.");
   }
 
+  const generation = Math.max(0, parseInt(raw.generation, 10) || 0);
+
+  const teacherHighlights = Array.isArray(raw.teacherHighlights)
+    ? raw.teacherHighlights.slice(0, 15).map(s => sanitizeString(s, 120)).filter(Boolean)
+    : [];
+
+  const roomHighlights = Array.isArray(raw.roomHighlights)
+    ? raw.roomHighlights.slice(0, 15).map(s => sanitizeString(s, 120)).filter(Boolean)
+    : [];
+
+  const studentHighlights = Array.isArray(raw.studentHighlights)
+    ? raw.studentHighlights.slice(0, 15).map(s => sanitizeString(s, 120)).filter(Boolean)
+    : [];
+
   const days = Array.isArray(raw.days)
     ? raw.days.slice(0, 7).map(d => sanitizeString(d, 15)).filter(Boolean)
     : ["Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -91,18 +105,31 @@ function validateAndSanitizeSummary(raw) {
     : [];
 
   return {
+    generation,
     days,
     periodsPerDay,
     totalSessions,
     clashCount,
     dailyDistribution,
+    teacherHighlights,
+    roomHighlights,
+    studentHighlights,
     teacherLoad,
     courseLoad,
     sectionLoad
   };
 }
 
-const SYSTEM_PROMPT = "You are an academic scheduling expert analyzing a generated timetable. CRITICAL RULES: 1. Course hours and teacher assignments are FIXED academic requirements decided by department syllabus and cannot be changed. Do NOT tell administrators to cut or add course sessions, change curriculum credits, or swap assigned teachers. 2. Focus on schedule execution quality: conflict-free verification, even distribution across days, and daily pace. 3. If clashCount is 0, clearly confirm the timetable is fully conflict-free and valid for publication. 4. Give 1 or 2 practical operational observations for managing the schedule smoothly (such as room turnarounds or peak day monitoring). Format: Short practical analysis. Max 200 words. Plain text only, no markdown, no asterisks, no bold, no underscores.";
+const SYSTEM_PROMPT = `You are a principal academic scheduling analyst providing a thorough executive briefing on a generated timetable.
+CRITICAL RULES:
+1. Course hours and teacher assignments are FIXED academic requirements mandated by syllabus and department curriculum—never suggest cutting sessions, adding credits, or swapping assigned faculty.
+2. Deliver a comprehensive, in-depth analytical summary (approximately 250 to 350 words) organized into four clear sections:
+   - SCHEDULE INTEGRITY & PACING: Confirm conflict-free status, evaluate week-wide session distribution, and overall timetable balance.
+   - FACULTY WORKLOAD & CONTINUITY: Highlight specific teachers with peak day loads or consecutive period streaks by name, and analyze teaching continuity.
+   - ROOM & FACILITY UTILIZATION: Analyze space utilization rates, call out high-demand rooms or underutilized labs by name, and note turnaround windows.
+   - STUDENT COHORT RHYTHM & OPERATIONAL ADVICE: Note cohort heavy/light days, any idle gaps between classes, and provide 2-3 concrete operational tips for campus administrators.
+3. Always reference specific teacher names, section labels, room names, and days from the data to keep the analysis concrete and insightful.
+Format: Plain text only, organized with clear capitalized section headers as shown above. No markdown asterisks, no bullet asterisks, no bold syntax, no underscores.`;
 
 function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
@@ -162,7 +189,7 @@ module.exports = async function handler(req, res) {
     
     // Strict Input Validation & Sanitization
     const sanitizedSummary = validateAndSanitizeSummary(rawBody.summary);
-    const userMsg = "Summary:\n" + JSON.stringify(sanitizedSummary);
+    const userMsg = `Timetable Generation Run: #${sanitizedSummary.generation}\n\nComprehensive Schedule Metrics & Detected Patterns:\n` + JSON.stringify(sanitizedSummary, null, 2);
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -177,7 +204,7 @@ module.exports = async function handler(req, res) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userMsg }
         ],
-        temperature: 0.3,
+        temperature: 0.7,
         max_completion_tokens: 4096
       })
     });
