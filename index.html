@@ -1818,7 +1818,7 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
       courseLoad: courseLoadSorted,
       sectionLoad: sectionLoadSorted
     };
-    const system = "Give a short, practical timetable analysis. Max 150 words. Focus only on top issues and 2 concrete fixes. Be blunt and specific.";
+    const system = "Give a short practical timetable analysis. Max 220 words. Focus on top issues and 2 concrete fixes. Plain text only, no markdown, asterisks, bold, or underscores.";
     const userMsg = "Summary:\n" + JSON.stringify(summary);
     const btn = document.getElementById("analyseAi");
     if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
