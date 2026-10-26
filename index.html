@@ -534,6 +534,19 @@
     <div id="advisorList" class="stack" style="display:grid; gap:8px;"></div>
   </section>
   <div id="grid"></div>
+  <section id="aiReviewSec" style="margin-top:18px; display:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+      <h2 style="margin:0; font-size:15px;">AI Review</h2>
+      <select id="aiProv">
+        <option value="groq" selected>Groq</option>
+        <option value="gemini">Gemini</option>
+      </select>
+      <input id="aiM" placeholder="Model (llama-3.1-8b-instant / gemini-2.5-flash)" style="flex:1; min-width:260px; max-width:340px">
+      <input id="aiK" type="password" placeholder="API key (saved)" style="flex:1; min-width:200px; max-width:260px">
+      <button id="aiRevBtn" type="button">Review timetable</button>
+    </div>
+    <div id="aiRevOut" class="stack" style="display:grid; gap:10px;"></div>
+  </section>
 
 </main>
 
@@ -1620,6 +1633,10 @@ function generate() {
       grid[key].push({section: ses.section, batch: ses.batch, code: ses.code, teacher: ses.teacher, room: ses.room});
     });
     window._lastResult = { days, perDay, grid };
+    const aiSec = document.getElementById("aiReviewSec");
+    if (aiSec) aiSec.style.display = "block";
+    const out = document.getElementById("aiRevOut");
+    if (out) out.innerHTML = "";
   } catch(e) {}
   showResult({ model, assignment: res.assignment, info: { backtracks: res.backtracks, ms } });
 }
@@ -1670,9 +1687,11 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
           after.split(/[;,]/).forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) teachers.add(tt); });
           continue;
         }
-        if (line.indexOf("#ROOMS") === 0) {
-          var after = line.replace(/^#ROOMS\s*/i, "").replace(/^,\s*/i, "");
-          after.split(/[;,]/).forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) rooms.add(tt); });
+        if (line.toUpperCase().indexOf("#ROOMS") === 0) {
+          var after = line.replace(/^#ROOMS\s*/i, "").replace(/^,\s*/i, "").replace(/^;\s*/i, "");
+          if (after) {
+            after.split(/[;,\n]/).forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^\s*#ROOMS\s*/i,""); if(tt && tt.length > 0) rooms.add(tt); });
+          }
           continue;
         }
         var hdr = line.toLowerCase();
@@ -1777,6 +1796,102 @@ document.getElementById("shareLink")?.addEventListener("click", function(){
       prompt("Copy this link", url);
     }
   } catch(e) { alert("Failed to create share link"); }
+});
+
+try {
+  const pk = localStorage.getItem("periodica_ai_key_groq");
+  const pm = localStorage.getItem("periodica_ai_key_gemini");
+  const provEl = document.getElementById("aiProv");
+  const kEl = document.getElementById("aiK");
+  const mEl = document.getElementById("aiM");
+  if (provEl) provEl.value = provEl.value || "groq";
+  if (kEl) {
+    const prov = provEl?.value || "groq";
+    if (prov === "groq" && pk) kEl.value = pk;
+    if (prov === "gemini" && pm) kEl.value = pm;
+  }
+  if (mEl && !mEl.value) mEl.value = "llama-3.1-8b-instant";
+  provEl?.addEventListener("change", () => {
+    const prov = provEl.value;
+    const k = localStorage.getItem("periodica_ai_key_" + prov);
+    if (kEl) kEl.value = k || "";
+    if (mEl) {
+      if (prov === "groq" && !mEl.value) mEl.value = "llama-3.1-8b-instant";
+      if (prov === "gemini" && !mEl.value) mEl.value = "gemini-2.5-flash";
+    }
+  });
+  kEl?.addEventListener("input", (e) => {
+    const prov = provEl?.value || "groq";
+    localStorage.setItem("periodica_ai_key_" + prov, e.target.value);
+  });
+} catch(e) {}
+
+document.getElementById("aiRevBtn")?.addEventListener("click", async () => {
+  try {
+    const prov = document.getElementById("aiProv")?.value || "groq";
+    const model = document.getElementById("aiM")?.value || (prov === "groq" ? "llama-3.1-8b-instant" : "gemini-2.5-flash");
+    const key = document.getElementById("aiK")?.value || localStorage.getItem("periodica_ai_key_" + prov) || "";
+    if (!key) { alert("Add API key"); return; }
+    if (!window._lastResult) { alert("Generate timetable first"); return; }
+    const res = window._lastResult;
+    const timetable = [];
+    for (let di=0; di<res.days.length; di++) {
+      const d = res.days[di];
+      for (let pi=0; pi<res.perDay; pi++) {
+        const key2 = di+":"+pi;
+        const cell = res.grid[key2];
+        if (!cell || !cell.length) continue;
+        for (let j=0; j<cell.length; j++) {
+          const it = cell[j];
+          timetable.push({day:d, period:pi+1, section:it.section||"", batch:it.batch||"", code:it.code||"", teacher:it.teacher||"", room:it.room||""});
+        }
+      }
+    }
+    const system = "You are reviewing a college timetable for clashes, workload, gaps, and overall quality. Analyze the provided timetable data. Return your review as a JSON array with objects like: [{\"title\": \"...\", \"severity\": \"info|warn|bad\", \"advice\": \"...\"}]. Focus on teacher workload balance, long gaps, room utilization, possible better arrangements, and any obvious red flags. Be practical and specific to this timetable. Don't say 'looks good' generically - give actionable advice. Only return valid JSON.";
+    const userMsg = "Timetable data:\n" + JSON.stringify({timetable});
+    document.getElementById("aiRevBtn").disabled = true;
+    document.getElementById("aiRevBtn").textContent = "Reviewing...";
+    let content = "";
+    if (prov === "groq") {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Authorization": "Bearer " + key},
+        body: JSON.stringify({model, messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4})
+      });
+      const data = await resp.json();
+      content = data.choices?.[0]?.message?.content || "";
+    } else {
+      const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + key, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({contents: [{role:"user", parts: [{text: system + "\n\n" + userMsg}]}], generationConfig: {temperature: 0.4}})
+      });
+      const data = await resp.json();
+      content = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    }
+    let items = [];
+    try {
+      content = content.replace(/```json/g,"").replace(/```/g,"");
+      items = JSON.parse(content);
+    } catch(e) {
+      items = [{title:"Raw response", severity:"info", advice: content}];
+    }
+    const out = document.getElementById("aiRevOut");
+    out.innerHTML = "";
+    items.slice(0, 10).forEach(function(it){
+      const div = document.createElement("div");
+      const sev = it.severity || "info";
+      const color = sev === "bad" ? "var(--danger)" : sev === "warn" ? "#f59e0b" : "var(--accent)";
+      div.style.cssText = "padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--panel); border-left:3px solid " + color + ";";
+      div.innerHTML = "<strong>" + (it.title||"") + "</strong><br><span style='color:var(--ink-2)'>" + (it.advice||"") + "</span>";
+      out.appendChild(div);
+    });
+  } catch(e) {
+    alert("Failed to review");
+  } finally {
+    document.getElementById("aiRevBtn").disabled = false;
+    document.getElementById("aiRevBtn").textContent = "Review timetable";
+  }
 });
 
 $("reschedule").onclick = () => {
