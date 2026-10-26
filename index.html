@@ -529,6 +529,10 @@
 
   <div id="msg" class="msg" role="status" aria-live="polite"></div>
   <div id="stats"></div>
+  <section id="advisor" style="margin-top:16px; display:none;">
+    <h2 style="margin:0 0 10px; font-size:15px;">Timetable Advisor</h2>
+    <div id="advisorList" class="stack" style="display:grid; gap:8px;"></div>
+  </section>
   <div id="grid"></div>
 
 </main>
@@ -1584,8 +1588,10 @@ function generate() {
   if (problems.length) {
     showResult(null, chip("not run", "fix the setup first"));
     setMsg("Fix these first:\n- " + problems.join("\n- "), "err");
+    if (typeof renderAdvisor === "function") renderAdvisor(problems);
     return;
   }
+  if (typeof renderAdvisor === "function") renderAdvisor([]);
 
   const t0 = performance.now();
   const res = solve(model, domains, generation);
