@@ -74,6 +74,7 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode: keep going */ } },
 };
 
+let pendingSharedResult = null;
 let state = load();
 let lastResult = null;       // { model, assignment, info } of the timetable on screen
 let generation = 0;          // Generate press counter, used as the variety seed
@@ -87,7 +88,11 @@ function load() {
       var b64 = location.hash.slice(1);
       var json = decodeURIComponent(escape(atob(b64)));
       var sd2 = JSON.parse(json);
-      sd2.otherBlocks = "";
+      if (sd2 && typeof sd2 === "object" && sd2.__share) {
+        pendingSharedResult = sd2.__share;
+        delete sd2.__share;
+      }
+      if (typeof sd2.otherBlocks !== "string") sd2.otherBlocks = "";
       if (!Array.isArray(sd2.otherBlocksArr)) sd2.otherBlocksArr = [];
       return sd2;
     }
@@ -533,10 +538,27 @@ function buildModel() {
   teachers.forEach((t, ti) => slots.forEach((sl, si) => { if (t.off.includes(sl.day)) offSlot[ti * N + si] = 1; }));
 
   // Apply other commitments from outside programs (MBA/BA/MTech/ECE etc)
-  if (state.otherBlocks) {
+  const hasOtherBlocks = Array.isArray(state.otherBlocksArr) && state.otherBlocksArr.length;
+  if (hasOtherBlocks || state.otherBlocks) {
     const dayMap = {};
     state.days.forEach((d, di) => { dayMap[d.toLowerCase()] = di; dayMap[d.slice(0,3).toLowerCase()] = di; });
-    for (const line of state.otherBlocks.split("\n")) {
+
+    if (hasOtherBlocks) {
+      for (const b of state.otherBlocksArr) {
+        const tid = teacherId[b.teacher];
+        if (tid === undefined) continue;
+        const dayStr = String(b.day || "").toLowerCase();
+        const di = dayMap[dayStr] ?? dayMap[dayStr.slice(0,3)];
+        if (di === undefined) continue;
+        const from = Math.max(1, Math.floor(Number(b.from) || 1));
+        const to = Math.max(from, Math.floor(Number(b.to) || from));
+        for (let p = from - 1; p <= to - 1; p++) {
+          if (p >= 0 && p < per) offSlot[tid * N + di * per + p] = 1;
+        }
+      }
+    }
+
+    for (const line of (state.otherBlocks || "").split("\n")) {
       const parts = line.split("|").map(x => x.trim()).filter(Boolean);
       if (parts.length < 3) continue;
       const tname = parts[0];
@@ -1223,23 +1245,63 @@ document.getElementById("ttExport")?.addEventListener("click", function(){
 });
 
 document.getElementById("shareLink")?.addEventListener("click", function(){
+  if (!lastResult) { alert("Generate a timetable first so the link includes it."); return; }
   try {
+    var a = lastResult.assignment;
+    var tt = a.map(function(x){ return x && Number.isInteger(x.si) && Number.isInteger(x.ri) ? x.si + "." + x.ri : "-1.-1"; }).join(",");
     var data = {
       teachers: state.teachers, rooms: state.rooms, courses: state.courses,
       days: state.days, periods: state.periods, startTime: state.startTime,
       periodMinutes: state.periodMinutes, breakMinutes: state.breakMinutes, dayEnd: state.dayEnd,
-      otherBlocksArr: state.otherBlocksArr||[]
+      otherBlocksArr: state.otherBlocksArr||[],
+      __share: { v: 1, seed: generation, bt: lastResult.info.backtracks, ms: lastResult.info.ms, tt: tt }
     };
     var json = JSON.stringify(data);
     var b64 = btoa(unescape(encodeURIComponent(json)));
     var url = location.origin + location.pathname + "#" + b64;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(function(){ alert("Share link copied"); }).catch(function(){ prompt("Copy this link", url); });
+      navigator.clipboard.writeText(url).then(function(){ alert("Share link copied with the generated timetable"); }).catch(function(){ prompt("Copy this link", url); });
     } else {
       prompt("Copy this link", url);
     }
   } catch(e) { alert("Failed to create share link"); }
 });
+
+function parseSharedAssignment(model, tt) {
+  if (typeof tt !== "string") return null;
+  var parts = tt.split(",");
+  if (parts.length !== model.sessions.length) return null;
+  var assignment = [];
+  for (var i = 0; i < parts.length; i++) {
+    var m = /^(\d+)\.(\d+)$/.exec(parts[i]);
+    if (!m) return null;
+    var si = +m[1], ri = +m[2];
+    if (si < 0 || si >= model.N || ri < 0 || ri >= model.rooms.length) return null;
+    if (si % model.per + model.sessions[i].span > model.per) return null;
+    assignment.push({ si: si, ri: ri, room: model.rooms[ri].name });
+  }
+  return assignment;
+}
+
+function applySharedResult(share) {
+  if (!share || share.v !== 1) return;
+  try {
+    var model = buildModel();
+    var domains = buildDomains(model);
+    var problems = diagnose(model, domains);
+    if (problems.length) { setMsg("Shared setup needs fixing:\n- " + problems.join("\n- "), "err"); return; }
+    var assignment = parseSharedAssignment(model, share.tt);
+    if (!assignment) { setMsg("Shared timetable could not be loaded; press Generate.", "err"); return; }
+    var clashes = verify(model, assignment);
+    if (clashes.length) { setMsg("Shared timetable failed verification; press Generate.", "err"); return; }
+    generation = Number.isInteger(share.seed) ? share.seed : 0;
+    var result = { model: model, assignment: assignment, info: { backtracks: Number(share.bt) || 0, ms: Number(share.ms) || 0 } };
+    showResult(result);
+    setMsg("Loaded shared setup and generated timetable.", "ok");
+  } catch (e) {
+    setMsg("Shared timetable could not be loaded; press Generate.", "err");
+  }
+}
 
 $("reschedule").onclick = () => {
   if (!lastResult) return;
@@ -1526,3 +1588,4 @@ if (document.getElementById('classesSec')) { document.getElementById('classesSec
 var addBtnInit=document.getElementById('addCourse'); if(addBtnInit) addBtnInit.style.display='none';
 renderAll();
 showResult(null);
+if (pendingSharedResult) applySharedResult(pendingSharedResult);
