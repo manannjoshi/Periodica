@@ -1791,22 +1791,16 @@ $("reschedule").onclick = () => {
 
 document.getElementById("analyseAi")?.addEventListener("click", async () => {
   try {
-    if (!window._lastResult) { alert("Generate timetable first"); return; }
+    if (!lastResult) { alert("Generate timetable first"); return; }
     const apiKey = "REDACTED";
-    const res = window._lastResult;
+    const model = lastResult.model, assignment = lastResult.assignment;
     const timetable = [];
-    for (let di=0; di<res.days.length; di++) {
-      const d = res.days[di];
-      for (let pi=0; pi<res.perDay; pi++) {
-        const key2 = di+":"+pi;
-        const cell = res.grid[key2];
-        if (!cell || !cell.length) continue;
-        for (let j=0; j<cell.length; j++) {
-          const it = cell[j];
-          timetable.push({day:d, period:pi+1, section:it.section||"", batch:it.batch||"", code:it.code||"", teacher:it.teacher||"", room:it.room||""});
-        }
-      }
-    }
+    model.sessions.forEach((ses, si) => {
+      const slot = assignment[si];
+      if (slot < 0) return;
+      const di = Math.floor(slot / model.perDay), pi = slot % model.perDay;
+      timetable.push({day: model.days[di], period: pi+1, section: ses.section||"", batch: ses.batch||"", code: ses.code||"", teacher: ses.teacher||"", room: ses.room||""});
+    });
     const system = "You are an expert college timetable analyst. Give a detailed but practical analysis of this timetable. Point out teacher workload issues, gaps, room usage, conflicts of interest, and concrete suggestions to improve it. Be honest and specific.";
     const userMsg = "Analyse this timetable:\n" + JSON.stringify({timetable});
     const btn = document.getElementById("analyseAi");
