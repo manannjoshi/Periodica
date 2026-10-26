@@ -1794,24 +1794,32 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
     if (!lastResult) { alert("Generate timetable first"); return; }
     const apiKey = "REDACTED";
     const model = lastResult.model, assignment = lastResult.assignment;
-    const timetable = [];
+    const teacherLoad = {};
+    const courseLoad = {};
+    const sectionLoad = {};
     model.sessions.forEach((ses, si) => {
       const a = assignment[si];
       if (!a || a.si < 0) return;
-      const di = Math.floor(a.si / model.perDay), pi = a.si % model.perDay;
-      timetable.push({
-        day: model.days[di],
-        period: pi + 1,
-        slot: model.slots[a.si]?.label || "",
-        section: ses.section || "",
-        batch: ses.batch || "",
-        code: ses.code || "",
-        teacher: ses.teacher || "",
-        room: a.room || (model.rooms[a.ri]?.name || "")
-      });
+      const t = ses.teacher || "Unknown";
+      teacherLoad[t] = (teacherLoad[t] || 0) + 1;
+      const c = ses.code || "Unknown";
+      courseLoad[c] = (courseLoad[c] || 0) + 1;
+      const s = ses.section + (ses.batch ? "/" + ses.batch : "");
+      sectionLoad[s] = (sectionLoad[s] || 0) + 1;
     });
-    const system = "You are an expert college timetable analyst. Give a detailed but practical analysis of this timetable. Point out teacher workload issues, gaps, room usage, and concrete suggestions to improve it. Be honest and specific. Analyse the provided data as-is; do not ask for more.";
-    const userMsg = "Analyse this timetable (JSON):\n" + JSON.stringify({timetable, meta: {days: model.days, periodsPerDay: model.perDay, totalSessions: timetable.length}}, null, 2);
+    const teacherLoadSorted = Object.entries(teacherLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({teacher:k, sessions:v}));
+    const sectionLoadSorted = Object.entries(sectionLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({section:k, sessions:v}));
+    const courseLoadSorted = Object.entries(courseLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({course:k, sessions:v}));
+    const summary = {
+      days: model.days,
+      periodsPerDay: model.perDay,
+      totalSessions: model.sessions.length,
+      teacherLoad: teacherLoadSorted,
+      courseLoad: courseLoadSorted,
+      sectionLoad: sectionLoadSorted
+    };
+    const system = "Give a short, practical timetable analysis. Max 150 words. Focus only on top issues and 2 concrete fixes. Be blunt and specific.";
+    const userMsg = "Summary:\n" + JSON.stringify(summary);
     const btn = document.getElementById("analyseAi");
     if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
     const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
