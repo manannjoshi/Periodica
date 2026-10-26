@@ -519,6 +519,7 @@
             <option value="room">by room (admin)</option>
           </select>
         </label>
+        <button id="shareLink" type="button" class="ghost">Share link</button>
         <button id="sample" type="button">Load sample data</button>
         <button id="clear" type="button">Clear all</button>
       </div>
@@ -616,6 +617,17 @@ let rescheduleMode = false;
 let rescheduleSel = null;    // { sessionIdx }
 
 function load() {
+  // try share link first
+  try {
+    if (typeof location !== 'undefined' && location.hash && location.hash.length > 1) {
+      var b64 = location.hash.slice(1);
+      var json = decodeURIComponent(escape(atob(b64)));
+      var sd2 = JSON.parse(json);
+      sd2.otherBlocks = "";
+      if (!Array.isArray(sd2.otherBlocksArr)) sd2.otherBlocksArr = [];
+      return sd2;
+    }
+  } catch(e) {}
   try {
     const s = JSON.parse(store.get(KEY));
     if (s && Array.isArray(s.courses) && Array.isArray(s.days) && typeof s.teachers === "string" && typeof s.rooms === "string") {
@@ -1628,6 +1640,99 @@ function exitRescheduleMode() {
   $("reschedule").classList.remove("on");
   setMsg("");
 }
+
+document.getElementById("csvImport")?.addEventListener("click", function(){ document.getElementById("csvFile")?.click(); });
+document.getElementById("csvFile")?.addEventListener("change", function(e){
+  var f = e.target.files && e.target.files[0];
+  if (!f) return;
+  var r = new FileReader();
+  r.onload = function(){
+    try {
+      var text = String(r.result||"");
+      var lines = text.split(/\r?\n/).filter(function(x){return x.trim();});
+      if (!lines.length) return;
+      var start = 0;
+      var hdr = lines[0].toLowerCase();
+      if (hdr.indexOf("course")>=0 || hdr.indexOf("code")>=0 || hdr.indexOf("section")>=0) start = 1;
+      var count = 0;
+      for (var i=start; i<lines.length; i++){
+        var line = lines[i];
+        var parts = line.split(",").map(function(x){return x.trim().replace(/^"|"$/g,"");});
+        if (parts.length < 2) continue;
+        var code = parts[0]||"", section = parts[1]||"", batch = parts[2]||"", teacher = parts[3]||"", meetings = parts[4]===undefined?"":parts[4], periods = parts[5]===undefined?"1":parts[5];
+        if (!code && !section) continue;
+        state.courses.push({code:code, section:section, batch:batch, teacher:teacher, blocksPerWeek: meetings===""?"":meetings, blockPeriods: periods||"1", roomType:"class", size:0});
+        count++;
+      }
+      save(); renderCourses();
+      alert("Imported " + count + " rows");
+    } catch(ex){ alert("Failed to import CSV"); }
+    e.target.value = "";
+  };
+  r.readAsText(f);
+});
+document.getElementById("csvExport")?.addEventListener("click", function(){
+  var rows = ["Course,Section,Batch,Teacher,Meetings,Periods"];
+  (state.courses||[]).forEach(function(c){
+    var vals = [c.code||"", c.section||"", c.batch||"", c.teacher||"", c.blocksPerWeek||"", c.blockPeriods||""];
+    rows.push(vals.map(function(v){
+      var s = String(v);
+      if (s.indexOf(",")>=0 || s.indexOf('"')>=0 || s.indexOf("\n")>=0) return '"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(","));
+  });
+  var blob = new Blob([rows.join("\n")], {type:"text/csv"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "periodica-classes.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+document.getElementById("ttExport")?.addEventListener("click", function(){
+  if (!window._lastResult) { alert("Generate timetable first"); return; }
+  var res = window._lastResult;
+  var rows = ["Day,Period,Section,Batch,Course,Teacher,Room"];
+  for (var di=0; di<res.days.length; di++){
+    var d = res.days[di];
+    for (var pi=0; pi<res.perDay; pi++){
+      var key = di+":"+pi;
+      var cell = res.grid[key];
+      if (!cell || !cell.length) continue;
+      for (var j=0; j<cell.length; j++){
+        var it = cell[j];
+        var vals = [d, pi+1, it.section||"", it.batch||"", it.code||"", it.teacher||"", it.room||""];
+        rows.push(vals.map(function(v){
+          var s = String(v);
+          if (s.indexOf(",")>=0 || s.indexOf('"')>=0 || s.indexOf("\n")>=0) return '"'+s.replace(/"/g,'""')+'"';
+          return s;
+        }).join(","));
+      }
+    }
+  }
+  var blob = new Blob([rows.join("\n")], {type:"text/csv"});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "periodica-timetable.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+document.getElementById("shareLink")?.addEventListener("click", function(){
+  try {
+    var data = {
+      teachers: state.teachers, rooms: state.rooms, courses: state.courses,
+      days: state.days, periods: state.periods, startTime: state.startTime,
+      periodMinutes: state.periodMinutes, breakMinutes: state.breakMinutes, dayEnd: state.dayEnd,
+      otherBlocksArr: state.otherBlocksArr||[]
+    };
+    var json = JSON.stringify(data);
+    var b64 = btoa(unescape(encodeURIComponent(json)));
+    var url = location.origin + location.pathname + "#" + b64;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function(){ alert("Share link copied"); }).catch(function(){ prompt("Copy this link", url); });
+    } else {
+      prompt("Copy this link", url);
+    }
+  } catch(e) { alert("Failed to create share link"); }
+});
 
 $("reschedule").onclick = () => {
   if (!lastResult) return;
