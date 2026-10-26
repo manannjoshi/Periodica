@@ -319,7 +319,6 @@
     height:56px; padding:4px 5px; vertical-align:top;
     border-bottom:1px solid var(--line-soft); border-right:1px solid var(--line-soft);
   }
-  #grid td.cell { display:flex; flex-direction:row; gap:4px; align-items:stretch; }
   #grid td:last-child{ border-right:0; }
   #grid tr:last-child td{ border-bottom:0; }
   #grid tr:hover td.cell{ background:var(--cell-hover); }
@@ -335,7 +334,7 @@
   .cell.valid-move:hover{ background:var(--h2btn-hover); }
 
   .ev{
-    display:flex; flex-direction:column; justify-content:center; border-left:3px solid var(--bc, hsl(var(--h) var(--evl-s) var(--evl-l)));
+    display:block; border-left:3px solid var(--bc, hsl(var(--h) var(--evl-s) var(--evl-l)));
     background:hsl(var(--h) var(--ev-s) var(--ev-l)); border-radius:0 8px 8px 0;
     padding:6px 8px 6px 10px; font-size:11.5px; line-height:1.35; color:var(--ev-ink);
     transition:box-shadow .15s ease, transform .15s ease;
@@ -1515,9 +1514,7 @@ function renderGrid(model, assignment) {
           if (start !== si) return `<span class="cont" data-i="${i}">${full}</span>`;
           const sel = rescheduleMode && rescheduleSel && rescheduleSel.sessionIdx === i;
           const style = `--h:${courseHue(s.code)}${s.batch && colors[s.batch] ? ";--bc:" + colors[s.batch] : ""}`;
-          const isMulti = list.length > 1;
-          const flex = isMulti ? ` flex:1 1 ${100/list.length}%; min-width:0;` : "";
-          return `<span class="ev${sel ? " resched-sel" : ""}" style="${style}${flex}" data-i="${i}">${full}</span>`;
+          return `<span class="ev${sel ? " resched-sel" : ""}" style="${style}" data-i="${i}">${full}</span>`;
         }).join("");
         const clash = list.some(x => clashIdx.has(x.i));
         html += `<td class="cell${target ? " valid-move" : ""}${clash ? " clash" : ""}" data-si="${si}">${body}</td>`;
