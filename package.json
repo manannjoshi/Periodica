@@ -1,0 +1,22 @@
+{
+  "name": "periodica",
+  "version": "1.15.0",
+  "description": "Periodica Timetable Generator & Scheduling Workbench",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "timetable",
+    "scheduler",
+    "csp",
+    "education"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "license": "ISC"
+}
+

@@ -1,1 +1,22 @@
-preview.png
+# Environment variables (API keys & secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Credentials & Service accounts
+*credential*.json
+*secret*.json
+service-account*.json
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+*.log
+
+# Operating System & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
