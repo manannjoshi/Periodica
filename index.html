@@ -817,9 +817,7 @@ function renderSlotPreview() {
     $("slotPreview").textContent = "Check the start time, period length and day end.";
     return;
   }
-  const one = t.map(x => fmt(x.start) + "–" + fmt(x.end)).join(", ");
-  const two = t.length >= 2 ? "  |  2-period block: " + fmt(t[0].start) + "–" + fmt(t[1].end) : "";
-  $("slotPreview").textContent = "Each day (" + t.length + " periods): " + one + two;
+  $("slotPreview").textContent = "";
 }
 
 function renderStatus(id, parsed, noun) {
