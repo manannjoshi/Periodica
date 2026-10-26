@@ -414,13 +414,13 @@
 
 <main class="wrap" id="main">
 
-  <details id="setup" open>
+  <details id="setup">
     <summary>Setup<span class="sum-hint">week · teachers · rooms · classes</span></summary>
     <div class="setup-body">
 
       <section>
         <h2 class="collapsible" data-target="ws">Week structure</h2>
-        <div id="ws" class="collapsible-content">
+        <div id="ws" class="collapsible-content collapsed">
         <div class="row">
           <label>Days <input id="days" class="w-days" placeholder="Mon,Tue,Wed"></label>
           <label>Start <input id="startTime" type="time"></label>
@@ -434,7 +434,7 @@
 
       <section>
         <h2 class="collapsible" data-target="trSec">Teachers & Rooms</h2>
-        <div id="trSec" class="collapsible-content">
+        <div id="trSec" class="collapsible-content collapsed">
       <section class="pair">
         <div>
           <h3 style="margin:0 0 8px; font-size:13px; font-weight:600; color:var(--ink-2);">Teachers</h3>
@@ -456,7 +456,7 @@
 
       <section>
         <h2 class="collapsible" data-target="classesSec" style="flex-wrap:wrap;"><span style="display:flex;align-items:center;gap:9px;">Classes</span><div id="batchActions" style="display:none; gap:8px; align-items:center; margin-left:auto;"><button id="batchSplit" type="button" class="ghost">Split to CS 11 & CS 12</button><button id="batchDuplicate" type="button" class="ghost">Duplicate selected</button><button id="batchDelete" type="button" class="ghost">Delete selected</button></div><button id="addCourse" type="button" onclick="event.stopPropagation(); event.preventDefault();" style="margin-left:auto;">+ add class</button></h2>
-        <div id="classesSec" class="collapsible-content">
+        <div id="classesSec" class="collapsible-content collapsed">
         <div class="table-wrap">
           <table>
             <thead><tr>
@@ -490,7 +490,7 @@
 
       <section>
         <h2 class="collapsible" data-target="otherSec">Unavailability</h2>
-        <div id="otherSec" class="collapsible-content">
+        <div id="otherSec" class="collapsible-content collapsed">
           <div class="row" style="gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;">
             <label>Teacher <select id="obTeacher"></select></label>
             <label>Day <select id="obDay"></select></label>
@@ -1967,8 +1967,8 @@ setupEl.addEventListener("toggle", () => store.set(SETUP_KEY, setupEl.open ? "1"
 if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
 
 if (document.getElementById('trSec')) { document.getElementById('trSec').classList.add('collapsed'); }
-if (document.getElementById('classesSec')) { document.getElementById('classesSec').classList.remove('collapsed'); }
-var addBtnInit=document.getElementById('addCourse'); if(addBtnInit) addBtnInit.style.display='inline-flex';
+if (document.getElementById('classesSec')) { document.getElementById('classesSec').classList.add('collapsed'); }
+var addBtnInit=document.getElementById('addCourse'); if(addBtnInit) addBtnInit.style.display='none';
 renderAll();
 showResult(null);
 </script>
