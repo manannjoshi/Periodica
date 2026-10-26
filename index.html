@@ -290,7 +290,8 @@
   #grid{ margin:0; }
   #grid:empty::before{
     content:"";
-    display:none;
+    display:block; height:200px;
+    background:var(--surface); border:1px dashed var(--line); border-radius:var(--radius);
   }
   #grid h3{
     display:flex; align-items:center; gap:9px; flex-wrap:wrap;
