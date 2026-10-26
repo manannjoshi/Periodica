@@ -1660,21 +1660,19 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       var lines = text.split(/\r?\n/).filter(function(x){return x.trim();});
       if (!lines.length) return;
       var teachers = new Set((state.teachers||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
-      var rooms = new Set((state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
+      var rooms = new Set((document.getElementById("rooms")?.value||state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
       var count = 0;
       for (var i=0; i<lines.length; i++){
         var line = lines[i].trim();
         if (!line) continue;
         if (line.indexOf("#TEACHERS") === 0) {
-          var p1 = line.split(",");
-          var tstr = p1.slice(1).join(",");
-          tstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) teachers.add(tt); });
+          var after = line.replace(/^#TEACHERS\s*/i, "").replace(/^,\s*/i, "");
+          after.split(/[;,]/).forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) teachers.add(tt); });
           continue;
         }
         if (line.indexOf("#ROOMS") === 0) {
-          var p2 = line.split(",");
-          var rstr = p2.slice(1).join(",");
-          rstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) rooms.add(tt); });
+          var after = line.replace(/^#ROOMS\s*/i, "").replace(/^,\s*/i, "");
+          after.split(/[;,]/).forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) rooms.add(tt); });
           continue;
         }
         var hdr = line.toLowerCase();
@@ -1690,20 +1688,23 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       }
       state.teachers = Array.from(teachers).filter(Boolean).join("\n");
       state.rooms = Array.from(rooms).filter(Boolean).join("\n");
+      if(!state.rooms) state.rooms = Array.from(rooms).filter(Boolean).join("\n");
       save();
       console.log("IMPORTED teachers:", state.teachers);
       console.log("IMPORTED rooms:", state.rooms);
       var teachersEl = document.getElementById("teachers");
-      if (teachersEl) { teachersEl.value = state.teachers; }
+      if (teachersEl) { teachersEl.value = state.teachers; state.teachers = teachersEl.value; }
       var roomsEl = document.getElementById("rooms");
-      if (roomsEl) { roomsEl.value = state.rooms; }
-      if (typeof renderPeople === "function") renderPeople();
-      if (typeof renderStatus === "function") {
-        try { renderStatus("teachersStatus", parseTeachers(state.teachers), "teacher"); } catch(e){}
-        try { renderStatus("roomsStatus", parseRooms(state.rooms), "room"); } catch(e){}
-      }
-      if (typeof renderCourses === "function") renderCourses();
-      if (typeof renderOtherBlocks === "function") renderOtherBlocks();
+      if (roomsEl) { roomsEl.value = state.rooms; state.rooms = roomsEl.value; }
+      if (roomsEl) state.rooms = roomsEl.value;
+      state.rooms = state.rooms.replace(/\r/g,"").replace(/\n+/g,"\n").trim();
+      save();
+      renderPeople();
+      try { renderStatus("teachersStatus", parseTeachers(state.teachers), "teacher"); } catch(e){}
+      try { renderStatus("roomsStatus", parseRooms(state.rooms), "room"); } catch(e){}
+      if (typeof renderLoad === "function") renderLoad();
+      renderCourses();
+      renderOtherBlocks();
       alert("Imported " + count + " rows");
     } catch(ex){ alert("Failed to import CSV"); }
     e.target.value = "";
@@ -1715,14 +1716,16 @@ document.getElementById("csvExport")?.addEventListener("click", function(){
   (state.courses||[]).forEach(function(c){
     var vals = [c.code||"", c.section||"", c.batch||"", c.teacher||"", c.blocksPerWeek||"", c.blockPeriods||"", c.room||""];
     rows.push(vals.map(function(v){
-      var s = String(v);
-      if (s.indexOf(",")>=0 || s.indexOf('"')>=0 || s.indexOf("\n")>=0) return '"'+s.replace(/"/g,'""')+'"';
-      return s;
+      var sv = String(v);
+      if (sv.indexOf(",")>=0 || sv.indexOf('"')>=0 || sv.indexOf("\n")>=0) return '"'+sv.replace(/"/g,'""')+'"';
+      return sv;
     }).join(","));
   });
   rows.push("");
-  rows.push("#TEACHERS " + (state.teachers||"").replace(/\n/g,";"));
-  rows.push("#ROOMS " + (state.rooms||"").replace(/\n/g,";"));
+  var tlist = (state.teachers||"").split("\n").map(function(x){return x.trim();}).filter(Boolean).join(";");
+  var rlist = (state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean).join(";");
+  rows.push("#TEACHERS " + tlist);
+  rows.push("#ROOMS " + rlist);
   var blob = new Blob([rows.join("\n")], {type:"text/csv"});
   var a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
