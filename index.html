@@ -1659,8 +1659,8 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       var text = String(r.result||"");
       var lines = text.split(/\r?\n/).filter(function(x){return x.trim();});
       if (!lines.length) return;
-      var teachers = new Set();
-      var rooms = new Set();
+      var teachers = new Set((state.teachers||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
+      var rooms = new Set((state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean));
       var count = 0;
       for (var i=0; i<lines.length; i++){
         var line = lines[i].trim();
@@ -1668,13 +1668,13 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
         if (line.indexOf("#TEACHERS") === 0) {
           var p1 = line.split(",");
           var tstr = p1.slice(1).join(",");
-          tstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,""); if(tt) teachers.add(tt); });
+          tstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) teachers.add(tt); });
           continue;
         }
         if (line.indexOf("#ROOMS") === 0) {
           var p2 = line.split(",");
           var rstr = p2.slice(1).join(",");
-          rstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,""); if(tt) rooms.add(tt); });
+          rstr.split(";").forEach(function(t){ var tt=t.trim().replace(/^"|"$/g,"").replace(/^#+/,""); if(tt) rooms.add(tt); });
           continue;
         }
         var hdr = line.toLowerCase();
@@ -1688,10 +1688,6 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
         if (room) rooms.add(room);
         count++;
       }
-      var existingT = (state.teachers||"").split("\n").map(function(x){return x.trim();}).filter(Boolean);
-      var existingR = (state.rooms||"").split("\n").map(function(x){return x.trim();}).filter(Boolean);
-      existingT.forEach(function(t){ teachers.add(t); });
-      existingR.forEach(function(t){ rooms.add(t); });
       state.teachers = Array.from(teachers).filter(Boolean).join("\n");
       state.rooms = Array.from(rooms).filter(Boolean).join("\n");
       save();
@@ -1719,8 +1715,8 @@ document.getElementById("csvExport")?.addEventListener("click", function(){
     }).join(","));
   });
   rows.push("");
-  rows.push("#TEACHERS," + (state.teachers||"").replace(/\n/g,";"));
-  rows.push("#ROOMS," + (state.rooms||"").replace(/\n/g,";"));
+  rows.push("#TEACHERS " + (state.teachers||"").replace(/\n/g,";"));
+  rows.push("#ROOMS " + (state.rooms||"").replace(/\n/g,";"));
   var blob = new Blob([rows.join("\n")], {type:"text/csv"});
   var a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
