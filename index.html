@@ -1695,6 +1695,8 @@ document.getElementById("csvFile")?.addEventListener("change", function(e){
       state.teachers = Array.from(teachers).filter(Boolean).join("\n");
       state.rooms = Array.from(rooms).filter(Boolean).join("\n");
       save();
+      if (typeof $("teachers") !== "undefined" && $("teachers")) $("teachers").value = state.teachers;
+      if (typeof $("rooms") !== "undefined" && $("rooms")) $("rooms").value = state.rooms;
       if (typeof renderPeople === "function") renderPeople();
       if (typeof renderCourses === "function") renderCourses();
       if (typeof renderOtherBlocks === "function") renderOtherBlocks();
