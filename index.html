@@ -1796,13 +1796,22 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
     const model = lastResult.model, assignment = lastResult.assignment;
     const timetable = [];
     model.sessions.forEach((ses, si) => {
-      const slot = assignment[si];
-      if (slot < 0) return;
-      const di = Math.floor(slot / model.perDay), pi = slot % model.perDay;
-      timetable.push({day: model.days[di], period: pi+1, section: ses.section||"", batch: ses.batch||"", code: ses.code||"", teacher: ses.teacher||"", room: ses.room||""});
+      const a = assignment[si];
+      if (!a || a.si < 0) return;
+      const di = Math.floor(a.si / model.perDay), pi = a.si % model.perDay;
+      timetable.push({
+        day: model.days[di],
+        period: pi + 1,
+        slot: model.slots[a.si]?.label || "",
+        section: ses.section || "",
+        batch: ses.batch || "",
+        code: ses.code || "",
+        teacher: ses.teacher || "",
+        room: a.room || (model.rooms[a.ri]?.name || "")
+      });
     });
-    const system = "You are an expert college timetable analyst. Give a detailed but practical analysis of this timetable. Point out teacher workload issues, gaps, room usage, and concrete suggestions to improve it. Be honest and specific. Do not ask for more data.";
-    const userMsg = "Here is the full timetable JSON. Analyse it now:\n" + JSON.stringify({timetable}, null, 2);
+    const system = "You are an expert college timetable analyst. Give a detailed but practical analysis of this timetable. Point out teacher workload issues, gaps, room usage, and concrete suggestions to improve it. Be honest and specific. Analyse the provided data as-is; do not ask for more.";
+    const userMsg = "Analyse this timetable (JSON):\n" + JSON.stringify({timetable, meta: {days: model.days, periodsPerDay: model.perDay, totalSessions: timetable.length}}, null, 2);
     const btn = document.getElementById("analyseAi");
     if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
     const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -1811,7 +1820,6 @@ document.getElementById("analyseAi")?.addEventListener("click", async () => {
       body: JSON.stringify({model: "openai/gpt-oss-20b", messages: [{role:"system", content: system}, {role:"user", content: userMsg}], temperature: 0.4, max_completion_tokens: 4096})
     });
     const data = await resp.json();
-    console.log(data);
     console.log(data);
     const msg = data.choices?.[0]?.message || {};
     const content = msg.content || msg.reasoning || data.error?.message || JSON.stringify(data);
