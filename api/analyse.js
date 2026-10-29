@@ -71,7 +71,32 @@ function validateAndSanitizeSummary(raw) {
 
   const periodsPerDay = Math.min(Math.max(1, parseInt(raw.periodsPerDay, 10) || 8), 24);
   const totalSessions = Math.min(Math.max(0, parseInt(raw.totalSessions, 10) || 0), 2000);
-  const clashCount = Math.max(0, parseInt(raw.clashCount, 10) || 0);
+  const schedule = Array.isArray(raw.schedule)
+    ? raw.schedule.slice(0, 1200).map(s => ({
+        course: sanitizeString(s?.course, 30) || "Unknown",
+        section: sanitizeString(s?.section, 30) || "Unknown",
+        batch: sanitizeString(s?.batch, 30),
+        teacher: sanitizeString(s?.teacher, 40) || "Unknown",
+        room: sanitizeString(s?.room, 40) || "Unknown",
+        day: sanitizeString(s?.day, 15) || "Unknown",
+        periods: Array.isArray(s?.periods)
+          ? [...new Set(s.periods.slice(0, 24).map(p => Math.min(24, Math.max(1, parseInt(p, 10) || 1))))]
+          : [],
+        times: Array.isArray(s?.times) ? s.times.slice(0, 24).map(t => sanitizeString(t, 20)).filter(Boolean) : []
+      }))
+    : [];
+  const scheduleComplete = raw.scheduleComplete === true && schedule.length === totalSessions &&
+    schedule.every(s => s.course !== "Unknown" && s.section !== "Unknown" && s.teacher !== "Unknown" &&
+      s.room !== "Unknown" && s.day !== "Unknown" && s.periods.length > 0);
+  const unavailable = Array.isArray(raw.unavailable)
+    ? raw.unavailable.slice(0, 1200).map(u => ({
+        teacher: sanitizeString(u?.teacher, 40) || "Unknown",
+        day: sanitizeString(u?.day, 15) || "Unknown",
+        periods: Array.isArray(u?.periods)
+          ? [...new Set(u.periods.slice(0, 24).map(p => Math.min(24, Math.max(1, parseInt(p, 10) || 1))))]
+          : []
+      })).filter(u => u.periods.length)
+    : [];
 
   const dailyDistribution = {};
   if (raw.dailyDistribution && typeof raw.dailyDistribution === "object") {
@@ -109,7 +134,9 @@ function validateAndSanitizeSummary(raw) {
     days,
     periodsPerDay,
     totalSessions,
-    clashCount,
+    schedule,
+    scheduleComplete,
+    unavailable,
     dailyDistribution,
     teacherHighlights,
     roomHighlights,
@@ -120,8 +147,10 @@ function validateAndSanitizeSummary(raw) {
   };
 }
 
-const SYSTEM_PROMPT = `You are a concise timetable improvement assistant. The application performs the authoritative conflict check separately.
-Give at most TWO short, specific setup suggestions, with a maximum of 25 words each. Use plain text, one suggestion per line. Base suggestions only on supplied metrics. Suggest spreading a teacher's busy day across available days, adding a room or period when utilization is high, or adjusting teacher availability. If total teaching loads differ substantially, you may suggest redistributing an existing class only if qualifications permit. Never remove required course meetings. Do not claim conflicts are absent. If no useful change is supported, say: No setup change is clearly needed.`;
+const SYSTEM_PROMPT = `Independently audit the supplied timetable session placements and teacher unavailability. Do not rely on any precomputed conflict verdict or count.
+Each session lists the 1-based periods it occupies on its day. Report a conflict when overlapping sessions have the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during the listed teacher unavailability.
+If scheduleComplete is false, explicitly say the independent conflict review is incomplete and do not call it conflict-free. Otherwise, inspect every row and state clearly whether the timetable is conflict-free; if not, name the specific clashes with day/period and affected classes. Do not repeat a client-provided conflict count.
+Return valid JSON only with exactly these string keys: "conflict", "improvements", and "summary". "improvements" gives at most two concise, actionable setup changes grounded in named teachers/days/rooms. Suggest spreading a busy day, adding room/period capacity, adjusting availability, or redistributing an existing class if qualifications permit. Never remove required meetings. If there is no clear improvement, say the setup looks good. "summary" is exactly two short sentences about schedule balance and workload. Do not repeat these instructions, describe reasoning, or add a preamble.`;
 
 function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
@@ -136,13 +165,23 @@ function sendJson(res, statusCode, data) {
 }
 
 module.exports = async function handler(req, res) {
-  // CORS Headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  // Same-origin requests need no CORS headers. Cross-origin browser access is
+  // allowed only for explicitly configured origins (comma-separated).
+  const origin = req.headers.origin;
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+    .split(",").map(value => value.trim()).filter(Boolean);
+  const isLocalDevelopmentOrigin = process.env.NODE_ENV !== "production" &&
+    /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || "");
+  const originAllowed = !!origin && (allowedOrigins.includes(origin) || isLocalDevelopmentOrigin);
+  if (originAllowed) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
 
   if (req.method === "OPTIONS") {
-    res.statusCode = 200;
+    res.statusCode = origin && !originAllowed ? 403 : 204;
     return res.end();
   }
 
@@ -181,7 +220,7 @@ module.exports = async function handler(req, res) {
     
     // Strict Input Validation & Sanitization
     const sanitizedSummary = validateAndSanitizeSummary(rawBody.summary);
-    const userMsg = `Verified clash count: ${sanitizedSummary.clashCount}. Suggest only useful setup improvements from these timetable metrics:\n` + JSON.stringify(sanitizedSummary, null, 2);
+    const userMsg = `Review the full timetable data and independently produce all three requested report fields:\n` + JSON.stringify(sanitizedSummary, null, 2);
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -197,7 +236,10 @@ module.exports = async function handler(req, res) {
           { role: "user", content: userMsg }
         ],
         temperature: 0.2,
-        max_completion_tokens: 180
+        max_completion_tokens: 350,
+        reasoning_effort: "low",
+        include_reasoning: false,
+        response_format: { type: "json_object" }
       })
     });
 
@@ -208,7 +250,7 @@ module.exports = async function handler(req, res) {
     }
 
     const msg = data.choices?.[0]?.message || {};
-    const content = msg.content || msg.reasoning || "No setup change is clearly needed.";
+    const content = msg.content || "";
     
     return sendJson(res, 200, { content });
   } catch (err) {

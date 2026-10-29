@@ -517,9 +517,41 @@ function resetData(next) {
   showResult(null);
   setMsg("");
 }
-$("sample").onclick = () => { if (confirm("Replace the current setup with the sample data?")) resetData(sampleData()); };
+$("sample").onclick = () => {
+  try {
+    resetData(sampleData());
+    setMsg("Sample setup loaded. Click Generate when you are ready to build the timetable.", "ok");
+  } catch (err) {
+    setMsg("Could not load sample data: " + (err.message || "unexpected error"), "err");
+  }
+};
 $("clear").onclick = () => {
-  if (confirm("Clear all teachers, rooms and classes?")) resetData(emptyData());
+  // Shared timetable links take precedence over localStorage during load; remove the hash too.
+  try {
+    if (location.hash) history.replaceState(history.state, "", location.pathname + location.search);
+  } catch (e) {
+    try { location.hash = ""; } catch (_) {}
+  }
+  pendingSharedResult = null;
+  generation = 0;
+  window._lastResult = null;
+  try { localStorage.removeItem(KEY); } catch (e) {}
+  resetData(emptyData());
+  $("view").value = "section";
+  const aiBox = $("aiAnalysisBox");
+  const aiOut = $("aiAnalysisOut");
+  const aiLoading = $("aiLoading");
+  const aiButton = $("analyseAi");
+  if (aiBox) aiBox.style.display = "none";
+  if (aiOut) aiOut.textContent = "";
+  if (aiLoading) aiLoading.hidden = true;
+  if (aiButton) {
+    aiButton.disabled = false;
+    aiButton.removeAttribute("aria-busy");
+    aiButton.textContent = "Analyse with AI";
+  }
+  const generationLoading = $("generationLoading");
+  if (generationLoading) generationLoading.hidden = true;
 };
 
 /* ================= model ================= */
@@ -1029,9 +1061,6 @@ function batchColors() {
 function renderGrid(model, assignment) {
   const view = $("view").value;
   const { slots, sessions, per } = model;
-  const clashIdx = new Set();
-  verify(model, assignment, clashIdx);
-
   const groups = view === "room" ? model.rooms.map(r => r.name)
     : [...new Set(state.courses.map(c => view === "section" ? c.section : c.teacher).filter(Boolean))];
   const heading = { room: g => "Room " + g, section: g => "Section " + g, teacher: g => g }[view];
@@ -1088,8 +1117,7 @@ function renderGrid(model, assignment) {
           const style = `--h:${courseHue(s.code)}${s.batch && colors[s.batch] ? ";--bc:" + colors[s.batch] : ""}`;
           return `<span class="ev${sel ? " resched-sel" : ""}" style="${style}" data-i="${i}">${full}</span>`;
         }).join("");
-        const clash = list.some(x => clashIdx.has(x.i));
-        html += `<td class="cell${target ? " valid-move" : ""}${clash ? " clash" : ""}" data-si="${si}">${body}</td>`;
+        html += `<td class="cell${target ? " valid-move" : ""}" data-si="${si}">${body}</td>`;
       });
       html += "</tr>";
     }
@@ -1112,18 +1140,15 @@ const chip = (value, name, cls) => `<span class="stat${cls ? " " + cls : ""}"><b
 
 function renderStats({ model, assignment, info }) {
   const m = metrics(model, assignment);
-  const problems = verify(model, assignment);
   const unplaced = model.sessions.length - m.placed;
   $("stats").innerHTML =
     chip(m.placed + "/" + model.sessions.length, "classes placed", unplaced ? "bad" : "good") +
-    chip(problems.length, "clashes", problems.length ? "bad" : "good") +
     chip(m.busiest, "most classes in a section's day") +
     chip(m.repeats, "twice in a day") +
     chip(m.periods, "periods used") +
     chip(info.optimal ? "proven" : "best found", "schedule score") +
     chip(info.optNodes || 0, "optimization checks") +
     chip(info.ms + " ms", "solve time");
-  if (problems.length) setMsg("Placed, but verification found conflicts:\n- " + problems.slice(0, 6).join("\n- "), "err");
 }
 
 function applyTheme(t) {
@@ -1159,7 +1184,7 @@ function showResult(result, statsHtml) {
   }
 }
 
-function generate() {
+function generateNow() {
   const aiBox = document.getElementById("aiAnalysisBox");
   if (aiBox) aiBox.style.display = "none";
   const model = buildModel();
@@ -1202,6 +1227,32 @@ function generate() {
     window._lastResult = { days, perDay, grid };
   } catch(e) {}
   showResult(lastResult);
+}
+
+async function generate() {
+  const button = $("generate");
+  if (button.disabled) return;
+  const label = button.querySelector(".generate-label");
+  const spinner = button.querySelector(".button-spinner");
+  const loading = $("generationLoading");
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  if (label) label.textContent = "Optimizing…";
+  if (spinner) spinner.hidden = false;
+  if (loading) loading.hidden = false;
+  try {
+    // Give the browser a frame to paint the loading state before the bounded search begins.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    generateNow();
+  } catch (err) {
+    setMsg("Could not generate a timetable: " + (err.message || "unexpected error"), "err");
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    if (label) label.textContent = "Generate";
+    if (spinner) spinner.hidden = true;
+    if (loading) loading.hidden = true;
+  }
 }
 $("generate").onclick = generate;
 
@@ -1404,11 +1455,13 @@ $("reschedule").onclick = () => {
   if (rescheduleMode) exitRescheduleMode(); else enterRescheduleMode();
 };
 
-const SYSTEM_PROMPT = `You are a concise timetable improvement assistant. The application performs the authoritative conflict check separately.
-Give at most TWO short, specific setup suggestions, maximum 25 words each, one per line. Use only supplied metrics. Suggest spreading a teacher's busy day, adding a room or period when utilization is high, or adjusting availability. If total teacher loads differ substantially, you may suggest redistributing an existing class if qualifications permit. Never remove required meetings. Do not claim conflicts are absent. If no useful change is supported, say: No setup change is clearly needed.`;
+const SYSTEM_PROMPT = `Independently audit the supplied timetable placements and teacher unavailability. Do not rely on a precomputed conflict verdict or count.
+Each session lists the 1-based periods it occupies on its day. Report overlapping sessions with the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during listed teacher unavailability.
+If scheduleComplete is false, say the independent review is incomplete and do not call it conflict-free. Otherwise inspect every row, state clearly whether it is conflict-free, and if not name clashes with day/period and affected classes. Do not repeat a client-provided count.
+Return valid JSON only with exactly these string keys: "conflict", "improvements", and "summary". Improvements: at most two concise, actionable setup changes grounded in named teachers/days/rooms; never remove required meetings. If none, say the setup looks good. Summary: exactly two short sentences about schedule balance and workload. Never repeat instructions, describe reasoning, or add a preamble.`;
 
 async function runGroqDirect(apiKey, summary) {
-  const userMsg = `Verified clash count: ${summary.clashCount}. Suggest useful setup improvements from these metrics:\n` + JSON.stringify(summary, null, 2);
+  const userMsg = `Independently review the full schedule and provide the three report fields from this data:\n` + JSON.stringify(summary, null, 2);
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -1422,31 +1475,48 @@ async function runGroqDirect(apiKey, summary) {
         { role: "user", content: userMsg }
       ],
       temperature: 0.2,
-      max_completion_tokens: 180
+      max_completion_tokens: 350,
+      reasoning_effort: "low",
+      include_reasoning: false,
+      response_format: { type: "json_object" }
     })
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     if (resp.status === 401) {
       localStorage.removeItem("periodica.groq_key");
-      throw new Error("Invalid Groq API key. The saved key was cleared; click Check & Improve to enter a valid key.");
+      throw new Error("Invalid Groq API key. The saved key was cleared; click Analyse with AI to enter a valid key.");
     }
     throw new Error(err.error?.message || `Groq API error (${resp.status})`);
   }
   const data = await resp.json();
   const msg = data.choices?.[0]?.message || {};
-  return msg.content || msg.reasoning || "No setup change is clearly needed.";
+  return msg.content || "";
 }
 
-function compactAdvice(text) {
-  let lines = String(text || "").split(/\r?\n/).map(s => s.replace(/^\s*[-*•\d.)]+\s*/, "").trim()).filter(Boolean);
-  if (lines.length < 2 && lines[0]) lines = lines[0].split(/(?<=[.!?])\s+/).filter(Boolean);
-  return lines.slice(0, 2).map(s => "• " + s.split(/\s+/).slice(0, 25).join(" ").slice(0, 200)).join("\n") || "• No setup change is clearly needed.";
+function parseAiReport(text, summary) {
+  let parsed = null;
+  try {
+    const raw = String(text || "").replace(/^```(?:json)?\s*|\s*```$/gi, "").trim();
+    parsed = JSON.parse(raw);
+  } catch (_) {}
+  const isMeta = s => /we need to|we should|based on (?:the )?metrics|the user|the prompt|as an ai|i should|i need to|reasoning:|at most two|exactly two short|independently audit/i.test(s);
+  const verdict = typeof parsed?.conflict === "string" ? parsed.conflict.trim() : "";
+  const improvements = typeof parsed?.improvements === "string" ? parsed.improvements.trim() : "";
+  const summaryText = typeof parsed?.summary === "string" ? parsed.summary.trim() : "";
+  const tidy = (s, maxWords) => s.replace(/^\s*[-*•\d.)]+\s*/, "").replace(/\s+/g, " ").trim().split(" ").slice(0, maxWords).join(" ");
+  return {
+    conflict: verdict && !isMeta(verdict) ? tidy(verdict, 70) : "Independent AI conflict review incomplete; no verdict was returned.",
+    improvements: improvements && !isMeta(improvements) ? tidy(improvements, 48) : "AI could not provide a setup recommendation.",
+    summary: summaryText && !isMeta(summaryText) ? tidy(summaryText, 38) : "AI summary unavailable."
+  };
 }
 
 document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
+  let analyzedResult = null;
   try {
     if (!lastResult) { alert("Generate timetable first"); return; }
+    analyzedResult = lastResult;
     
     // Holding Shift while clicking lets user change their saved key on static sites
     if (e.shiftKey && localStorage.getItem("periodica.groq_key")) {
@@ -1460,14 +1530,15 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
     const model = lastResult.model, assignment = lastResult.assignment;
     const days = model.days;
     const per = model.per;
-    const clashes = verify(model, assignment);
-    const conflictStatus = clashes.length
-      ? `Conflict check: ${clashes.length} issue${clashes.length === 1 ? "" : "s"} found.\n${clashes.slice(0, 3).map(x => "• " + x).join("\n")}`
-      : "Conflict check: Conflict-free (verified).";
     const analysisBox = document.getElementById("aiAnalysisBox");
     const analysisOut = document.getElementById("aiAnalysisOut");
-    if (analysisOut) analysisOut.textContent = `${conflictStatus}\n\nSetup improvements:\nChecking…`;
-    if (analysisBox) analysisBox.style.display = "block";
+    const aiLoading = document.getElementById("aiLoading");
+    if (analysisOut) analysisOut.textContent = "Independent AI conflict review in progress. No verdict yet.";
+    if (analysisBox) {
+      analysisBox.style.display = "block";
+      analysisBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    if (aiLoading) aiLoading.hidden = false;
 
     const teacherDayLoad = {};
     const teacherDayPeriods = {};
@@ -1591,7 +1662,28 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
       days: model.days,
       periodsPerDay: model.per,
       totalSessions: model.sessions.length,
-      clashCount: clashes.length,
+      scheduleComplete: assignment.length === model.sessions.length && assignment.every(Boolean),
+      schedule: model.sessions.map((ses, si) => {
+        const a = assignment[si];
+        if (!a) return null;
+        const slot = model.slots[a.si];
+        return {
+          course: ses.code,
+          section: ses.section,
+          batch: ses.batch,
+          teacher: ses.teacher,
+          room: a.room || model.rooms[a.ri]?.name || "Unknown",
+          day: slot.day,
+          periods: Array.from({ length: ses.span }, (_, k) => slot.index + k + 1),
+          times: Array.from({ length: ses.span }, (_, k) => model.slots[a.si + k].label)
+        };
+      }).filter(Boolean),
+      unavailable: model.teachers.flatMap((teacher, ti) => model.days.map(day => ({
+        teacher: teacher.name,
+        day,
+        periods: model.slots.filter((slot, si) => slot.day === day && model.offSlot[ti * model.N + si])
+          .map(slot => slot.index + 1)
+      })).filter(item => item.periods.length)),
       dailyDistribution: dailySessions,
       teacherHighlights: teacherHighlights.slice(0, 12),
       roomHighlights: roomHighlights.slice(0, 12),
@@ -1601,7 +1693,7 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
       sectionLoad: sectionLoadSorted
     };
     const btn = document.getElementById("analyseAi");
-    if (btn) { btn.disabled = true; btn.textContent = "Analysing..."; }
+    if (btn) { btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "Analysing…"; }
 
     let content = "";
     const isGitHubPages = location.hostname.endsWith("github.io");
@@ -1652,26 +1744,27 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
       }
     }
 
+    if (lastResult !== analyzedResult) return; // Ignore a response if Clear or Generate replaced this timetable.
     const box = document.getElementById("aiAnalysisBox");
     const out = document.getElementById("aiAnalysisOut");
-    if (out) out.textContent = `${conflictStatus}\n\nSetup improvements:\n${compactAdvice(content)}`;
+    const report = parseAiReport(content, summary);
+    if (out) out.textContent = `${report.conflict}\n\n${report.improvements}\n\n${report.summary}`;
     if (box) {
       box.style.display = "block";
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   } catch(e) {
+    if (analyzedResult && lastResult !== analyzedResult) return;
     let msg = e.message || "Unknown error";
-    const issues = lastResult ? verify(lastResult.model, lastResult.assignment) : [];
-    const status = issues.length
-      ? `Conflict check: ${issues.length} issue${issues.length === 1 ? "" : "s"} found.\n${issues.slice(0, 3).map(x => "• " + x).join("\n")}`
-      : "Conflict check: Conflict-free (verified).";
     const box = document.getElementById("aiAnalysisBox");
     const out = document.getElementById("aiAnalysisOut");
-    if (out) out.textContent = `${status}\n\nSetup suggestions unavailable: ${msg}`;
+    if (out) out.textContent = `Independent AI conflict review unavailable; no verdict was returned.\n\nAI setup suggestions unavailable: ${msg}\n\nAI summary unavailable.`;
     if (box) box.style.display = "block";
   } finally {
     const btn = document.getElementById("analyseAi");
-    if (btn) { btn.disabled = false; btn.textContent = "Check & Improve"; }
+    const aiLoading = document.getElementById("aiLoading");
+    if (aiLoading) aiLoading.hidden = true;
+    if (btn) { btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "Analyse with AI"; }
   }
 });
 
@@ -1828,6 +1921,52 @@ $("grid").addEventListener("click", e => {
   }
 });
 
+const disclosureAnimations = new WeakMap();
+document.querySelectorAll(".collapsible").forEach(header => {
+  const content = document.getElementById(header.dataset.target);
+  if (content) header.setAttribute("aria-expanded", String(!content.classList.contains("collapsed")));
+});
+function animateDisclosure(element, expand, { collapsedClass = true, fromHeight, fromOpacity, onFinish } = {}) {
+  const activeAnimation = disclosureAnimations.get(element);
+  const wasCollapsed = collapsedClass && element.classList.contains("collapsed");
+  const startHeight = activeAnimation
+    ? element.getBoundingClientRect().height
+    : (fromHeight ?? (wasCollapsed ? 0 : element.getBoundingClientRect().height));
+  const startOpacity = activeAnimation
+    ? Number.parseFloat(getComputedStyle(element).opacity)
+    : (fromOpacity ?? (wasCollapsed ? 0 : Number.parseFloat(getComputedStyle(element).opacity)));
+  activeAnimation?.cancel();
+  disclosureAnimations.delete(element);
+
+  if (collapsedClass) element.classList.toggle("collapsed", !expand);
+  element.classList.add("is-collapsing");
+
+  const finish = () => {
+    element.classList.remove("is-collapsing");
+    onFinish?.();
+  };
+  if (!element.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    finish();
+    return;
+  }
+
+  const endHeight = expand ? element.scrollHeight : 0;
+  const endOpacity = expand ? 1 : 0;
+  const animation = element.animate(
+    [
+      { height: `${startHeight}px`, opacity: Number.isFinite(startOpacity) ? startOpacity : (expand ? 0 : 1) },
+      { height: `${endHeight}px`, opacity: endOpacity }
+    ],
+    { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)" }
+  );
+  disclosureAnimations.set(element, animation);
+  animation.onfinish = () => {
+    if (disclosureAnimations.get(element) !== animation) return;
+    disclosureAnimations.delete(element);
+    finish();
+  };
+}
+
 document.addEventListener("click", e => {
   // Don't toggle if clicking on buttons inside collapsible header
   if (e.target.closest("button")) return;
@@ -1838,11 +1977,12 @@ document.addEventListener("click", e => {
   const content = document.getElementById(target);
   if (!content) return;
   const collapser = h.querySelector(".collapser");
-  if (content.classList.contains("collapsed")) {
-    content.classList.remove("collapsed");
+  const expand = content.classList.contains("collapsed");
+  animateDisclosure(content, expand);
+  h.setAttribute("aria-expanded", String(expand));
+  if (expand) {
     if (collapser) collapser.textContent = "−";
   } else {
-    content.classList.add("collapsed");
     if (collapser) collapser.textContent = "+";
   }
   if (target === "classesSec") {
@@ -1920,6 +2060,22 @@ const setupEl = $("setup");
 const savedOpen = store.get(SETUP_KEY);
 if (savedOpen !== null) setupEl.open = savedOpen === "1";
 else setupEl.open = true;
+let setupDesiredOpen = setupEl.open;
+const setupSummary = setupEl.querySelector(":scope > summary");
+const setupBody = setupEl.querySelector(":scope > .setup-body");
+setupSummary.addEventListener("click", event => {
+  event.preventDefault();
+  const wasOpen = setupEl.open;
+  const expand = !setupDesiredOpen;
+  setupDesiredOpen = expand;
+  if (expand) setupEl.open = true;
+  animateDisclosure(setupBody, expand, {
+    collapsedClass: false,
+    fromHeight: expand && !wasOpen ? 0 : undefined,
+    fromOpacity: expand && !wasOpen ? 0 : undefined,
+    onFinish: () => { if (!expand) setupEl.open = false; }
+  });
+});
 setupEl.addEventListener("toggle", () => store.set(SETUP_KEY, setupEl.open ? "1" : "0"));
 
 const addBtnInit = document.getElementById('addCourse');

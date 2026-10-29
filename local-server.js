@@ -28,7 +28,7 @@ if (fs.existsSync(envFile)) {
 const analyseHandler = require("./api/analyse");
 
 const PORT = parseInt(process.env.PORT, 10) || 3000;
-const MAX_PAYLOAD_SIZE = 50 * 1024; // 50 KB max request body
+const MAX_PAYLOAD_SIZE = 512 * 1024; // timetable rows are sent for independent AI conflict review
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -59,7 +59,7 @@ const server = http.createServer(async (req, res) => {
         exceeded = true;
         res.statusCode = 413;
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ error: "Payload too large. Max allowed size is 50KB." }));
+        res.end(JSON.stringify({ error: "Payload too large. Max allowed size is 512KB." }));
         req.destroy();
       } else {
         body += chunk;

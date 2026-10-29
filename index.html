@@ -117,9 +117,9 @@
       </section>
 
       <div class="data-actions">
-        <button id="generate" type="button">Generate</button>
+        <button id="generate" type="button"><span class="generate-label">Generate</span><span class="button-spinner" aria-hidden="true" hidden></span></button>
         <button id="reschedule" class="ghost" type="button" hidden>Reschedule</button>
-        <button id="analyseAi" class="ghost" type="button" hidden>Check & Improve</button>
+        <button id="analyseAi" class="ghost" type="button" hidden>Analyse with AI</button>
         <label class="field-inline" for="view"><span>View</span>
           <select id="view">
             <option value="section" selected>by section</option>
@@ -138,6 +138,11 @@
   </details>
 
   <div id="msg" class="msg" role="status" aria-live="polite"></div>
+  <div id="generationLoading" class="generation-loading" role="status" aria-live="polite" hidden>
+    <div class="loading-orb" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="loading-copy"><strong>Finding your best timetable</strong><span>Balancing classes, faculty, rooms, and open periods</span></div>
+    <div class="loading-track" aria-hidden="true"><i></i></div>
+  </div>
   <div id="stats"></div>
   <section id="aiAnalysisBox" style="margin-top:14px; display:none;">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
@@ -147,6 +152,11 @@
       <button id="aiAnalysisClose" type="button" class="ghost" style="padding:0 8px; height:26px; font-size:12px; display:inline-flex; align-items:center; gap:4px;" aria-label="Close AI Overview" title="Close AI Overview">
         <span>Close</span> ×
       </button>
+    </div>
+    <div id="aiLoading" class="ai-loading" role="status" aria-live="polite" hidden>
+      <span class="ai-spinner" aria-hidden="true"></span>
+      <span>Checking timetable patterns and preparing a concise report</span>
+      <span class="ai-loading-track" aria-hidden="true"><i></i></span>
     </div>
     <div id="aiAnalysisOut" style="white-space:pre-wrap; padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); line-height:1.6; font-size:13.5px; color:var(--ink);"></div>
   </section>
@@ -164,6 +174,6 @@
   </svg>
 </button>
 
-<script src="ui.js"></script>
+<script src="ui.js?v=1.16.1"></script>
 </body>
 </html>
