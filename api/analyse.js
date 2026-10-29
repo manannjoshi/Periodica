@@ -86,21 +86,21 @@ function validateAndSanitizeSummary(raw) {
   const teacherLoad = Array.isArray(raw.teacherLoad)
     ? raw.teacherLoad.slice(0, 50).map(t => ({
         teacher: sanitizeString(t?.teacher, 40) || "Unknown",
-        sessions: Math.max(0, parseInt(t?.sessions, 10) || 0)
+        periods: Math.max(0, parseInt(t?.periods ?? t?.sessions, 10) || 0)
       }))
     : [];
 
   const courseLoad = Array.isArray(raw.courseLoad)
     ? raw.courseLoad.slice(0, 50).map(c => ({
         course: sanitizeString(c?.course, 30) || "Unknown",
-        sessions: Math.max(0, parseInt(c?.sessions, 10) || 0)
+        periods: Math.max(0, parseInt(c?.periods ?? c?.sessions, 10) || 0)
       }))
     : [];
 
   const sectionLoad = Array.isArray(raw.sectionLoad)
     ? raw.sectionLoad.slice(0, 50).map(s => ({
         section: sanitizeString(s?.section, 30) || "Unknown",
-        sessions: Math.max(0, parseInt(s?.sessions, 10) || 0)
+        periods: Math.max(0, parseInt(s?.periods ?? s?.sessions, 10) || 0)
       }))
     : [];
 
@@ -120,16 +120,8 @@ function validateAndSanitizeSummary(raw) {
   };
 }
 
-const SYSTEM_PROMPT = `You are a principal academic scheduling analyst providing a thorough executive briefing on a generated timetable.
-CRITICAL RULES:
-1. Course hours and teacher assignments are FIXED academic requirements mandated by syllabus and department curriculum—never suggest cutting sessions, adding credits, or swapping assigned faculty.
-2. Deliver a comprehensive, in-depth analytical summary (approximately 250 to 350 words) organized into four clear sections:
-   - SCHEDULE INTEGRITY & PACING: Confirm conflict-free status, evaluate week-wide session distribution, and overall timetable balance.
-   - FACULTY WORKLOAD & CONTINUITY: Highlight specific teachers with peak day loads or consecutive period streaks by name, and analyze teaching continuity.
-   - ROOM & FACILITY UTILIZATION: Analyze space utilization rates, call out high-demand rooms or underutilized labs by name, and note turnaround windows.
-   - STUDENT COHORT RHYTHM & OPERATIONAL ADVICE: Note cohort heavy/light days, any idle gaps between classes, and provide 2-3 concrete operational tips for campus administrators.
-3. Always reference specific teacher names, section labels, room names, and days from the data to keep the analysis concrete and insightful.
-Format: Plain text only, organized with clear capitalized section headers as shown above. No markdown asterisks, no bullet asterisks, no bold syntax, no underscores.`;
+const SYSTEM_PROMPT = `You are a concise timetable improvement assistant. The application performs the authoritative conflict check separately.
+Give at most TWO short, specific setup suggestions, with a maximum of 25 words each. Use plain text, one suggestion per line. Base suggestions only on supplied metrics. Suggest spreading a teacher's busy day across available days, adding a room or period when utilization is high, or adjusting teacher availability. If total teaching loads differ substantially, you may suggest redistributing an existing class only if qualifications permit. Never remove required course meetings. Do not claim conflicts are absent. If no useful change is supported, say: No setup change is clearly needed.`;
 
 function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
@@ -180,7 +172,7 @@ module.exports = async function handler(req, res) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return sendJson(res, 500, {
-      error: "GROQ_API_KEY is not configured on Vercel. Please go to Vercel Project Settings > Environment Variables, add GROQ_API_KEY, and redeploy."
+      error: "GROQ_API_KEY is not configured. Add it in Vercel Project Settings > Environment Variables, then redeploy."
     });
   }
 
@@ -189,7 +181,7 @@ module.exports = async function handler(req, res) {
     
     // Strict Input Validation & Sanitization
     const sanitizedSummary = validateAndSanitizeSummary(rawBody.summary);
-    const userMsg = `Timetable Generation Run: #${sanitizedSummary.generation}\n\nComprehensive Schedule Metrics & Detected Patterns:\n` + JSON.stringify(sanitizedSummary, null, 2);
+    const userMsg = `Verified clash count: ${sanitizedSummary.clashCount}. Suggest only useful setup improvements from these timetable metrics:\n` + JSON.stringify(sanitizedSummary, null, 2);
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -204,8 +196,8 @@ module.exports = async function handler(req, res) {
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userMsg }
         ],
-        temperature: 0.7,
-        max_completion_tokens: 4096
+        temperature: 0.2,
+        max_completion_tokens: 180
       })
     });
 
@@ -216,7 +208,7 @@ module.exports = async function handler(req, res) {
     }
 
     const msg = data.choices?.[0]?.message || {};
-    const content = msg.content || msg.reasoning || "No analysis generated.";
+    const content = msg.content || msg.reasoning || "No setup change is clearly needed.";
     
     return sendJson(res, 200, { content });
   } catch (err) {

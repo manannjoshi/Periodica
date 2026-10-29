@@ -77,7 +77,7 @@ const store = {
 let pendingSharedResult = null;
 let state = load();
 let lastResult = null;       // { model, assignment, info } of the timetable on screen
-let generation = 0;          // Generate press counter, used as the variety seed
+let generation = 0;          // Generate press counter, retained in share links
 let rescheduleMode = false;
 let rescheduleSel = null;    // { sessionIdx }
 
@@ -631,7 +631,7 @@ function buildModel() {
   const counts = meetingCounts();
   const sessions = [];
   state.courses.forEach((c, row) => {
-    const span = 1;
+    const span = Math.max(1, Math.floor(Number(c.blockPeriods) || 1));
     const tid = teacherId[c.teacher] != null ? teacherId[c.teacher] : -1;
     if (sectionIndex[c.section] == null) sectionIndex[c.section] = Object.keys(sectionIndex).length;
     const atoms = atomsFor(c.section, c.batch);
@@ -664,7 +664,7 @@ function buildDomains(model) {
     const dom = [];
     const roomsOk = eligibleRooms(model, s);
     for (const si of model.starts(s.span)) {
-      if (s.tid >= 0 && model.offSlot[s.tid * model.N + si]) continue;
+      if (s.tid >= 0 && Array.from({ length: s.span }, (_, k) => model.offSlot[s.tid * model.N + si + k]).some(Boolean)) continue;
       for (const ri of roomsOk) dom.push({ si, ri, room: model.rooms[ri].name });
     }
     return dom;
@@ -789,15 +789,26 @@ function makeTally(model) {
   return {
     add(s, si, ri, d) {
       const { di, index } = sl[si];
-      secDay[s.sec * D + di] += d; secPer[s.sec * P + index] += d;
-      if (s.tid >= 0) { teaDay[s.tid * D + di] += d; teaPer[s.tid * P + index] += d; }
-      rowDay[s.row * D + di] += d; roomUse[ri] += d;
+      secDay[s.sec * D + di] += d * s.span;
+      teaDay[s.tid * D + di] += s.tid >= 0 ? d * s.span : 0;
+      rowDay[s.row * D + di] += d;
+      roomUse[ri] += d * s.span;
+      for (let k = 0; k < s.span; k++) {
+        const period = sl[si + k].index;
+        secPer[s.sec * P + period] += d;
+        if (s.tid >= 0) teaPer[s.tid * P + period] += d;
+      }
     },
     marginal(s, si, ri) {
-      const { di, index } = sl[si];
-      let c = W.secDay * (2 * secDay[s.sec * D + di] + 1) + W.secPeriod * (2 * secPer[s.sec * P + index] + 1)
-            + W.room * (2 * roomUse[ri] + 1);
-      if (s.tid >= 0) c += W.teaDay * (2 * teaDay[s.tid * D + di] + 1) + W.teaPeriod * (2 * teaPer[s.tid * P + index] + 1);
+      const { di } = sl[si], dayAmount = s.span;
+      let c = W.secDay * (2 * secDay[s.sec * D + di] * dayAmount + dayAmount * dayAmount)
+            + W.room * (2 * roomUse[ri] * dayAmount + dayAmount * dayAmount);
+      if (s.tid >= 0) c += W.teaDay * (2 * teaDay[s.tid * D + di] * dayAmount + dayAmount * dayAmount);
+      for (let k = 0; k < s.span; k++) {
+        const period = sl[si + k].index;
+        c += W.secPeriod * (2 * secPer[s.sec * P + period] + 1);
+        if (s.tid >= 0) c += W.teaPeriod * (2 * teaPer[s.tid * P + period] + 1);
+      }
       if (rowDay[s.row * D + di] > 0) c += W.sameDay;   // same class twice in one day
       return c;
     },
@@ -808,19 +819,9 @@ function makeTally(model) {
 const MAX_NODES = 200000;   // safety nets for setups that have no solution; a valid setup never gets near them
 const MAX_MS = 3000;
 
-/* A fixed pseudo-random tie-break below 1, so it can only reorder placements the cost calls equal.
-   seed 0 adds nothing: the canonical timetable. Other seeds give other, equally valid ones. */
-function jitter(seed, i, si, ri) {
-  if (!seed) return 0;
-  let h = Math.imul(seed, 0x9e3779b1) ^ Math.imul(i + 1, 0x85ebca6b) ^ Math.imul(si + 1, 0xc2b2ae35) ^ Math.imul(ri + 1, 0x27d4eb2f);
-  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-  return ((h >>> 0) % 900) / 1000;
-}
-
-/* Backtracking search. Each step places the class with the fewest legal (time, room) choices left
-   (a class with none means this branch is dead, so it is dropped at once), trying its cheapest
-   placements first. Then a balancing pass polishes the result. Same input and seed, same timetable. */
-function solve(model, domains, seed = 0) {
+/* Find a valid timetable, improve it locally, then use bounded branch-and-bound to
+   find a lower-scoring schedule. Results are deterministic for the same setup. */
+function solve(model, domains) {
   const { sessions } = model;
   const n = sessions.length;
   const board = makeBoard(model), tally = makeTally(model);
@@ -845,7 +846,7 @@ function solve(model, domains, seed = 0) {
     const s = sessions[pick];
     const options = [];
     for (const v of domains[pick])
-      if (board.free(s, v.si, v.ri)) options.push({ v, cost: tally.marginal(s, v.si, v.ri) + jitter(seed, pick, v.si, v.ri) });
+      if (board.free(s, v.si, v.ri)) options.push({ v, cost: tally.marginal(s, v.si, v.ri) });
     options.sort((a, b) => a.cost - b.cost || a.v.si - b.v.si || a.v.ri - b.v.ri);
 
     for (const { v } of options) {
@@ -859,8 +860,71 @@ function solve(model, domains, seed = 0) {
   }
 
   const ok = search(0);
-  if (ok) improve(model, assignment, domains);
-  return { ok, assignment, backtracks, gaveUp };
+  if (!ok) return { ok, assignment, backtracks, gaveUp, optimal: false };
+  improve(model, assignment, domains);
+
+  const objective = candidate => {
+    const scoreTally = makeTally(model);
+    let score = 0;
+    candidate.forEach((a, i) => {
+      const s = sessions[i];
+      score += scoreTally.marginal(s, a.si, a.ri);
+      scoreTally.add(s, a.si, a.ri, 1);
+    });
+    return score;
+  };
+  let bestAssignment = assignment.map(a => ({ ...a }));
+  let bestScore = objective(bestAssignment);
+  let optimal = false;
+  let optNodes = 0;
+  const optBoard = makeBoard(model), optTally = makeTally(model);
+  const work = new Array(n).fill(null);
+  const OPT_MAX_NODES = 300000;
+  const OPT_MAX_MS = 1800;
+
+  function optimize(placed, score) {
+    if (placed === n) {
+      if (score < bestScore - 1e-9) {
+        bestScore = score;
+        bestAssignment = work.map(a => ({ ...a }));
+      }
+      return;
+    }
+    if (++optNodes > OPT_MAX_NODES || performance.now() - t0 > MAX_MS + OPT_MAX_MS) {
+      gaveUp = true;
+      return;
+    }
+    if (score >= bestScore - 1e-9) return;
+
+    let pick = -1, fewest = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (work[i]) continue;
+      const s = sessions[i];
+      let count = 0;
+      for (const v of domains[i]) if (optBoard.free(s, v.si, v.ri)) count++;
+      if (!count) return;
+      if (count < fewest || (count === fewest && (pick < 0 || s.span > sessions[pick].span))) {
+        fewest = count; pick = i;
+      }
+    }
+    const s = sessions[pick];
+    const choices = domains[pick].filter(v => optBoard.free(s, v.si, v.ri))
+      .map(v => ({ v, cost: optTally.marginal(s, v.si, v.ri) }))
+      .sort((a, b) => a.cost - b.cost || a.v.si - b.v.si || a.v.ri - b.v.ri);
+    for (const { v, cost } of choices) {
+      if (score + cost >= bestScore - 1e-9) continue;
+      work[pick] = v;
+      optBoard.put(s, v.si, v.ri, true); optTally.add(s, v.si, v.ri, 1);
+      optimize(placed + 1, score + cost);
+      optBoard.put(s, v.si, v.ri, false); optTally.add(s, v.si, v.ri, -1);
+      work[pick] = null;
+      if (optNodes > OPT_MAX_NODES || performance.now() - t0 > MAX_MS + OPT_MAX_MS) return;
+    }
+  }
+
+  optimize(0, 0);
+  optimal = !gaveUp;
+  return { ok, assignment: bestAssignment, backtracks, gaveUp, optimal, optNodes };
 }
 
 /* Balancing pass: take each class out, put it back where it adds the least cost, repeat until
@@ -903,7 +967,8 @@ function verify(model, assignment, clashIdx) {
     // room type check removed
     // capacity check removed
     if (a.si % per + s.span > per) problems.push(`${label(s)}: runs past the end of ${at.day}`);
-    if (s.tid >= 0 && model.offSlot[s.tid * N + a.si]) problems.push(`${label(s)}: ${s.teacher} is unavailable on ${at.day}`);
+    if (s.tid >= 0 && Array.from({ length: s.span }, (_, k) => model.offSlot[s.tid * N + a.si + k]).some(Boolean))
+      problems.push(`${label(s)}: ${s.teacher} is unavailable during the class on ${at.day}`);
     for (let k = 0; k < s.span; k++) {
       if (!byPeriod.has(a.si + k)) byPeriod.set(a.si + k, []);
       byPeriod.get(a.si + k).push(i);
@@ -1055,7 +1120,8 @@ function renderStats({ model, assignment, info }) {
     chip(m.busiest, "most classes in a section's day") +
     chip(m.repeats, "twice in a day") +
     chip(m.periods, "periods used") +
-    chip(info.backtracks, "backtracks") +
+    chip(info.optimal ? "proven" : "best found", "schedule score") +
+    chip(info.optNodes || 0, "optimization checks") +
     chip(info.ms + " ms", "solve time");
   if (problems.length) setMsg("Placed, but verification found conflicts:\n- " + problems.slice(0, 6).join("\n- "), "err");
 }
@@ -1108,7 +1174,7 @@ function generate() {
   if (typeof renderAdvisor === "function") renderAdvisor([]);
 
   const t0 = performance.now();
-  const res = solve(model, domains, generation);
+  const res = solve(model, domains);
   const ms = Math.round(performance.now() - t0);
 
   if (!res.ok) {
@@ -1119,23 +1185,23 @@ function generate() {
     return;
   }
 
-  generation++;   // the next press uses the next seed, so it gives a different arrangement
+  generation++;
   setMsg("");
-  lastResult = { model, assignment: res.assignment, info: { backtracks: res.backtracks, ms } };
+  lastResult = { model, assignment: res.assignment, info: { backtracks: res.backtracks, ms, optimal: res.optimal, optNodes: res.optNodes } };
   try {
-    const days = model.days, perDay = model.perDay;
+    const days = model.days, perDay = model.per;
     const grid = {};
     model.sessions.forEach((ses, si) => {
-      const slot = res.assignment[si];
-      if (slot < 0) return;
-      const di = Math.floor(slot / perDay), pi = slot % perDay;
+      const placement = res.assignment[si];
+      if (!placement) return;
+      const di = Math.floor(placement.si / perDay), pi = placement.si % perDay;
       const key = di + ":" + pi;
       if (!grid[key]) grid[key] = [];
-      grid[key].push({section: ses.section, batch: ses.batch, code: ses.code, teacher: ses.teacher, room: ses.room});
+      grid[key].push({section: ses.section, batch: ses.batch, code: ses.code, teacher: ses.teacher, room: placement.room});
     });
     window._lastResult = { days, perDay, grid };
   } catch(e) {}
-  showResult({ model, assignment: res.assignment, info: { backtracks: res.backtracks, ms } });
+  showResult(lastResult);
 }
 $("generate").onclick = generate;
 
@@ -1284,7 +1350,7 @@ document.getElementById("shareLink")?.addEventListener("click", function(){
       days: state.days, periods: state.periods, startTime: state.startTime,
       periodMinutes: state.periodMinutes, breakMinutes: state.breakMinutes, dayEnd: state.dayEnd,
       otherBlocksArr: state.otherBlocksArr||[],
-      __share: { v: 1, seed: generation, bt: lastResult.info.backtracks, ms: lastResult.info.ms, tt: tt }
+      __share: { v: 1, seed: generation, bt: lastResult.info.backtracks, ms: lastResult.info.ms, optimal: lastResult.info.optimal, optNodes: lastResult.info.optNodes, tt: tt }
     };
     var json = JSON.stringify(data);
     var b64 = btoa(unescape(encodeURIComponent(json)));
@@ -1325,7 +1391,7 @@ function applySharedResult(share) {
     var clashes = verify(model, assignment);
     if (clashes.length) { setMsg("Shared timetable failed verification; press Generate.", "err"); return; }
     generation = Number.isInteger(share.seed) ? share.seed : 0;
-    var result = { model: model, assignment: assignment, info: { backtracks: Number(share.bt) || 0, ms: Number(share.ms) || 0 } };
+    var result = { model: model, assignment: assignment, info: { backtracks: Number(share.bt) || 0, ms: Number(share.ms) || 0, optimal: share.optimal === true, optNodes: Number(share.optNodes) || 0 } };
     showResult(result);
     setMsg("Loaded shared setup and generated timetable.", "ok");
   } catch (e) {
@@ -1338,19 +1404,11 @@ $("reschedule").onclick = () => {
   if (rescheduleMode) exitRescheduleMode(); else enterRescheduleMode();
 };
 
-const SYSTEM_PROMPT = `You are a principal academic scheduling analyst providing a thorough executive briefing on a generated timetable.
-CRITICAL RULES:
-1. Course hours and teacher assignments are FIXED academic requirements mandated by syllabus and department curriculum—never suggest cutting sessions, adding credits, or swapping assigned faculty.
-2. Deliver a comprehensive, in-depth analytical summary (approximately 250 to 350 words) organized into four clear sections:
-   - SCHEDULE INTEGRITY & PACING: Confirm conflict-free status, evaluate week-wide session distribution, and overall timetable balance.
-   - FACULTY WORKLOAD & CONTINUITY: Highlight specific teachers with peak day loads or consecutive period streaks by name, and analyze teaching continuity.
-   - ROOM & FACILITY UTILIZATION: Analyze space utilization rates, call out high-demand rooms or underutilized labs by name, and note turnaround windows.
-   - STUDENT COHORT RHYTHM & OPERATIONAL ADVICE: Note cohort heavy/light days, any idle gaps between classes, and provide 2-3 concrete operational tips for campus administrators.
-3. Always reference specific teacher names, section labels, room names, and days from the data to keep the analysis concrete and insightful.
-Format: Plain text only, organized with clear capitalized section headers as shown above. No markdown asterisks, no bullet asterisks, no bold syntax, no underscores.`;
+const SYSTEM_PROMPT = `You are a concise timetable improvement assistant. The application performs the authoritative conflict check separately.
+Give at most TWO short, specific setup suggestions, maximum 25 words each, one per line. Use only supplied metrics. Suggest spreading a teacher's busy day, adding a room or period when utilization is high, or adjusting availability. If total teacher loads differ substantially, you may suggest redistributing an existing class if qualifications permit. Never remove required meetings. Do not claim conflicts are absent. If no useful change is supported, say: No setup change is clearly needed.`;
 
 async function runGroqDirect(apiKey, summary) {
-  const userMsg = `Timetable Generation Run: #${summary.generation}\n\nComprehensive Schedule Metrics & Detected Patterns:\n` + JSON.stringify(summary, null, 2);
+  const userMsg = `Verified clash count: ${summary.clashCount}. Suggest useful setup improvements from these metrics:\n` + JSON.stringify(summary, null, 2);
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -1363,21 +1421,27 @@ async function runGroqDirect(apiKey, summary) {
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userMsg }
       ],
-      temperature: 0.7,
-      max_completion_tokens: 4096
+      temperature: 0.2,
+      max_completion_tokens: 180
     })
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     if (resp.status === 401) {
       localStorage.removeItem("periodica.groq_key");
-      throw new Error("Invalid Groq API Key. The saved key was cleared; please click Analyse with AI to enter a valid key.");
+      throw new Error("Invalid Groq API key. The saved key was cleared; click Check & Improve to enter a valid key.");
     }
     throw new Error(err.error?.message || `Groq API error (${resp.status})`);
   }
   const data = await resp.json();
   const msg = data.choices?.[0]?.message || {};
-  return msg.content || msg.reasoning || "No analysis generated.";
+  return msg.content || msg.reasoning || "No setup change is clearly needed.";
+}
+
+function compactAdvice(text) {
+  let lines = String(text || "").split(/\r?\n/).map(s => s.replace(/^\s*[-*•\d.)]+\s*/, "").trim()).filter(Boolean);
+  if (lines.length < 2 && lines[0]) lines = lines[0].split(/(?<=[.!?])\s+/).filter(Boolean);
+  return lines.slice(0, 2).map(s => "• " + s.split(/\s+/).slice(0, 25).join(" ").slice(0, 200)).join("\n") || "• No setup change is clearly needed.";
 }
 
 document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
@@ -1396,6 +1460,14 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
     const model = lastResult.model, assignment = lastResult.assignment;
     const days = model.days;
     const per = model.per;
+    const clashes = verify(model, assignment);
+    const conflictStatus = clashes.length
+      ? `Conflict check: ${clashes.length} issue${clashes.length === 1 ? "" : "s"} found.\n${clashes.slice(0, 3).map(x => "• " + x).join("\n")}`
+      : "Conflict check: Conflict-free (verified).";
+    const analysisBox = document.getElementById("aiAnalysisBox");
+    const analysisOut = document.getElementById("aiAnalysisOut");
+    if (analysisOut) analysisOut.textContent = `${conflictStatus}\n\nSetup improvements:\nChecking…`;
+    if (analysisBox) analysisBox.style.display = "block";
 
     const teacherDayLoad = {};
     const teacherDayPeriods = {};
@@ -1417,28 +1489,28 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
 
       // Teacher load
       const t = ses.teacher || "Unknown";
-      teacherLoad[t] = (teacherLoad[t] || 0) + 1;
+      teacherLoad[t] = (teacherLoad[t] || 0) + ses.span;
       if (!teacherDayLoad[t]) teacherDayLoad[t] = {};
-      teacherDayLoad[t][day] = (teacherDayLoad[t][day] || 0) + 1;
+      teacherDayLoad[t][day] = (teacherDayLoad[t][day] || 0) + ses.span;
       if (!teacherDayPeriods[t]) teacherDayPeriods[t] = {};
       if (!teacherDayPeriods[t][day]) teacherDayPeriods[t][day] = [];
-      teacherDayPeriods[t][day].push(pIdx);
+      for (let k = 0; k < ses.span; k++) teacherDayPeriods[t][day].push(pIdx + k);
 
       // Room load
-      roomTotalUse[room] = (roomTotalUse[room] || 0) + 1;
+      roomTotalUse[room] = (roomTotalUse[room] || 0) + ses.span;
       if (!roomDayLoad[room]) roomDayLoad[room] = {};
-      roomDayLoad[room][day] = (roomDayLoad[room][day] || 0) + 1;
+      roomDayLoad[room][day] = (roomDayLoad[room][day] || 0) + ses.span;
 
       // Section load
       const secKey = ses.section + (ses.batch ? "/" + ses.batch : "");
-      sectionLoad[secKey] = (sectionLoad[secKey] || 0) + 1;
+      sectionLoad[secKey] = (sectionLoad[secKey] || 0) + ses.span;
       if (!sectionDayPeriods[secKey]) sectionDayPeriods[secKey] = {};
       if (!sectionDayPeriods[secKey][day]) sectionDayPeriods[secKey][day] = [];
-      sectionDayPeriods[secKey][day].push(pIdx);
+      for (let k = 0; k < ses.span; k++) sectionDayPeriods[secKey][day].push(pIdx + k);
 
       // Course load
       const c = ses.code || "Unknown";
-      courseLoad[c] = (courseLoad[c] || 0) + 1;
+      courseLoad[c] = (courseLoad[c] || 0) + ses.span;
     });
 
     // Detect teacher highlights: peak day & consecutive streaks
@@ -1498,14 +1570,13 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
         }
       }
       if (maxC >= 4 || hasGap) {
-        studentHighlights.push(`Section ${sec}: heaviest on ${maxD} (${maxC} classes)${gapInfo ? `, ${gapInfo}` : ""}`);
+        studentHighlights.push(`Section ${sec}: heaviest on ${maxD} (${maxC} periods)${gapInfo ? `, ${gapInfo}` : ""}`);
       }
     }
 
-    const teacherLoadSorted = Object.entries(teacherLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({teacher:k, sessions:v}));
-    const sectionLoadSorted = Object.entries(sectionLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({section:k, sessions:v}));
-    const courseLoadSorted = Object.entries(courseLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({course:k, sessions:v}));
-    const clashes = verify(model, assignment);
+    const teacherLoadSorted = Object.entries(teacherLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({teacher:k, periods:v}));
+    const sectionLoadSorted = Object.entries(sectionLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({section:k, periods:v}));
+    const courseLoadSorted = Object.entries(courseLoad).sort((a,b)=>b[1]-a[1]).map(([k,v])=>({course:k, periods:v}));
     const dailySessions = {};
     days.forEach(d => { dailySessions[d] = 0; });
     model.sessions.forEach((ses, si) => {
@@ -1539,7 +1610,7 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
       // GitHub Pages is purely static and cannot execute serverless/Node code
       let key = localStorage.getItem("periodica.groq_key");
       if (!key) {
-        key = prompt("GitHub Pages is a static host without a backend server.\n\nTo use AI Analysis on GitHub Pages, enter your Groq API key:\n(Saved only in your browser's private localStorage)");
+        key = prompt("GitHub Pages is a static host without a backend server.\n\nEnter your Groq API key to use AI Analysis:\n(Saved only in this browser)");
         if (!key || !key.trim()) return;
         localStorage.setItem("periodica.groq_key", key.trim());
       }
@@ -1564,7 +1635,7 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
         // Fallback for any other static hosting
         let key = localStorage.getItem("periodica.groq_key");
         if (!key) {
-          key = prompt("This site is running on a static server without a backend.\n\nEnter your Groq API key to run analysis directly:\n(Saved in your browser only)");
+          key = prompt("This site is running on a static server without a backend.\n\nEnter your Groq API key to run analysis directly:\n(Saved only in this browser)");
           if (!key || !key.trim()) return;
           localStorage.setItem("periodica.groq_key", key.trim());
         }
@@ -1583,18 +1654,24 @@ document.getElementById("analyseAi")?.addEventListener("click", async (e) => {
 
     const box = document.getElementById("aiAnalysisBox");
     const out = document.getElementById("aiAnalysisOut");
-    if (out) out.textContent = content;
-    if (out) out.textContent = content;
+    if (out) out.textContent = `${conflictStatus}\n\nSetup improvements:\n${compactAdvice(content)}`;
     if (box) {
       box.style.display = "block";
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   } catch(e) {
     let msg = e.message || "Unknown error";
-    alert("Analysis Failed:\n\n" + msg);
+    const issues = lastResult ? verify(lastResult.model, lastResult.assignment) : [];
+    const status = issues.length
+      ? `Conflict check: ${issues.length} issue${issues.length === 1 ? "" : "s"} found.\n${issues.slice(0, 3).map(x => "• " + x).join("\n")}`
+      : "Conflict check: Conflict-free (verified).";
+    const box = document.getElementById("aiAnalysisBox");
+    const out = document.getElementById("aiAnalysisOut");
+    if (out) out.textContent = `${status}\n\nSetup suggestions unavailable: ${msg}`;
+    if (box) box.style.display = "block";
   } finally {
     const btn = document.getElementById("analyseAi");
-    if (btn) { btn.disabled = false; btn.textContent = "Analyse with AI"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Check & Improve"; }
   }
 });
 
@@ -1727,6 +1804,8 @@ function moveSelectedTo(td) {
     return;
   }
   rescheduleSel = null;
+  lastResult.info.optimal = false;
+  lastResult.info.optNodes = 0;
   renderStats(lastResult);
   renderGrid(model, assignment);
   setMsg(`Moved ${model.sessions[idx].code} to ${model.slots[move.si].day} ${model.slots[move.si].label} in ${move.room}. Click another class, or Exit Reschedule.`, "ok");
