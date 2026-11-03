@@ -148,9 +148,37 @@ function validateAndSanitizeSummary(raw) {
 }
 
 const SYSTEM_PROMPT = `Independently audit the supplied timetable session placements and teacher unavailability. Do not rely on any precomputed conflict verdict or count.
-Each session lists the 1-based periods it occupies on its day. Report a conflict when overlapping sessions have the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during the listed teacher unavailability.
-If scheduleComplete is false, explicitly say the independent conflict review is incomplete and do not call it conflict-free. Otherwise, inspect every row and state clearly whether the timetable is conflict-free; if not, name the specific clashes with day/period and affected classes. Do not repeat a client-provided conflict count.
+The data uses indexed labels: sessions are [courseId, cohortId, teacherId, roomId, dayId, periods], and unavailable rows are [teacherId, dayId, periods]. Periods are arrays of 1-based period numbers. Resolve IDs through courses, cohorts ([section,batch], where an empty batch means the whole section), teachers, rooms, and days. Report a conflict when overlapping sessions have the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during the listed teacher unavailability.
+If complete is false, explicitly say the independent conflict review is incomplete and do not call it conflict-free. Otherwise, inspect every row and state clearly whether the timetable is conflict-free; if not, name the specific clashes with day/period and affected classes. Do not repeat a client-provided conflict count.
 Return valid JSON only with exactly these string keys: "conflict", "improvements", and "summary". "improvements" gives at most two concise, actionable setup changes grounded in named teachers/days/rooms. Suggest spreading a busy day, adding room/period capacity, adjusting availability, or redistributing an existing class if qualifications permit. Never remove required meetings. If there is no clear improvement, say the setup looks good. "summary" is exactly two short sentences about schedule balance and workload. Do not repeat these instructions, describe reasoning, or add a preamble.`;
+
+// Encode repeated timetable labels once so large schedules stay within Groq's
+// on-demand TPM limit. The full schedule remains present for independent review.
+function compactSummary(summary) {
+  const dictionaries = { courses: [], cohorts: [], teachers: [], rooms: [], days: [] };
+  const indexes = Object.fromEntries(Object.keys(dictionaries).map(key => [key, new Map()]));
+  const id = (key, value) => {
+    const normalized = Array.isArray(value) ? JSON.stringify(value) : String(value || "");
+    const map = indexes[key];
+    if (!map.has(normalized)) {
+      map.set(normalized, dictionaries[key].length);
+      dictionaries[key].push(Array.isArray(value) ? value : normalized);
+    }
+    return map.get(normalized);
+  };
+  summary.days.forEach(day => id("days", day));
+  const sessions = summary.schedule.map(row => [
+    id("courses", row.course), id("cohorts", [row.section, row.batch]),
+    id("teachers", row.teacher), id("rooms", row.room), id("days", row.day),
+    row.periods
+  ]);
+  const unavailable = summary.unavailable.map(row => [
+    id("teachers", row.teacher), id("days", row.day), row.periods
+  ]);
+  return { complete: summary.scheduleComplete, total: summary.totalSessions,
+    days: dictionaries.days, courses: dictionaries.courses, cohorts: dictionaries.cohorts,
+    teachers: dictionaries.teachers, rooms: dictionaries.rooms, sessions, unavailable };
+}
 
 function sendJson(res, statusCode, data) {
   res.statusCode = statusCode;
@@ -220,7 +248,7 @@ module.exports = async function handler(req, res) {
     
     // Strict Input Validation & Sanitization
     const sanitizedSummary = validateAndSanitizeSummary(rawBody.summary);
-    const userMsg = `Review the full timetable data and independently produce all three requested report fields:\n` + JSON.stringify(sanitizedSummary, null, 2);
+    const userMsg = `Independently review all timetable data and produce the three report fields.\n` + JSON.stringify(compactSummary(sanitizedSummary));
 
     const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",

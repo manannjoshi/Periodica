@@ -1456,12 +1456,38 @@ $("reschedule").onclick = () => {
 };
 
 const SYSTEM_PROMPT = `Independently audit the supplied timetable placements and teacher unavailability. Do not rely on a precomputed conflict verdict or count.
-Each session lists the 1-based periods it occupies on its day. Report overlapping sessions with the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during listed teacher unavailability.
-If scheduleComplete is false, say the independent review is incomplete and do not call it conflict-free. Otherwise inspect every row, state clearly whether it is conflict-free, and if not name clashes with day/period and affected classes. Do not repeat a client-provided count.
+The data uses indexed labels: sessions are [courseId, cohortId, teacherId, roomId, dayId, periods], and unavailable rows are [teacherId, dayId, periods]. Periods are arrays of 1-based period numbers. Resolve IDs through courses, cohorts ([section,batch], where an empty batch means the whole section), teachers, rooms, and days. Report overlapping sessions with the same teacher, same room, or same student cohort. Sessions with the same section conflict if either batch is blank or both batch names match; two different named batches may run simultaneously. Also report sessions placed during listed teacher unavailability.
+If complete is false, say the independent review is incomplete and do not call it conflict-free. Otherwise inspect every row, state clearly whether it is conflict-free, and if not name clashes with day/period and affected classes. Do not repeat a client-provided count.
 Return valid JSON only with exactly these string keys: "conflict", "improvements", and "summary". Improvements: at most two concise, actionable setup changes grounded in named teachers/days/rooms; never remove required meetings. If none, say the setup looks good. Summary: exactly two short sentences about schedule balance and workload. Never repeat instructions, describe reasoning, or add a preamble.`;
 
+function compactAiSummary(summary) {
+  const dictionaries = { courses: [], cohorts: [], teachers: [], rooms: [], days: [] };
+  const indexes = Object.fromEntries(Object.keys(dictionaries).map(key => [key, new Map()]));
+  const id = (key, value) => {
+    const normalized = Array.isArray(value) ? JSON.stringify(value) : String(value || "");
+    const map = indexes[key];
+    if (!map.has(normalized)) {
+      map.set(normalized, dictionaries[key].length);
+      dictionaries[key].push(Array.isArray(value) ? value : normalized);
+    }
+    return map.get(normalized);
+  };
+  summary.days.forEach(day => id("days", day));
+  const sessions = summary.schedule.map(row => [
+    id("courses", row.course), id("cohorts", [row.section, row.batch]),
+    id("teachers", row.teacher), id("rooms", row.room), id("days", row.day),
+    row.periods
+  ]);
+  const unavailable = summary.unavailable.map(row => [
+    id("teachers", row.teacher), id("days", row.day), row.periods
+  ]);
+  return { complete: summary.scheduleComplete, total: summary.totalSessions,
+    days: dictionaries.days, courses: dictionaries.courses, cohorts: dictionaries.cohorts,
+    teachers: dictionaries.teachers, rooms: dictionaries.rooms, sessions, unavailable };
+}
+
 async function runGroqDirect(apiKey, summary) {
-  const userMsg = `Independently review the full schedule and provide the three report fields from this data:\n` + JSON.stringify(summary, null, 2);
+  const userMsg = `Independently review all timetable data and produce the three report fields.\n` + JSON.stringify(compactAiSummary(summary));
   const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
